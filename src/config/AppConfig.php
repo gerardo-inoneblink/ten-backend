@@ -6,15 +6,15 @@ use Dotenv\Dotenv;
 
 class AppConfig
 {
-    private static $instance = null;
+    private static ?AppConfig $instance = null;
     private $config = [];
 
     private function __construct()
     {
-        $this->loadConfig();
+        $this->loadEnvironment();
     }
 
-    public static function getInstance()
+    public static function getInstance(): AppConfig
     {
         if (self::$instance === null) {
             self::$instance = new self();
@@ -22,18 +22,31 @@ class AppConfig
         return self::$instance;
     }
 
-    private function loadConfig()
+    private function loadEnvironment(): void
     {
-        $dotenv = Dotenv::createImmutable(__DIR__ . '/../../');
-        $dotenv->load();
-
-        $this->config['app_name'] = getenv('APP_NAME') ?: 'FlexkitTen';
-        $this->config['app_version'] = getenv('APP_VERSION') ?: '1.0.0';
-        $this->config['debug_mode'] = getenv('DEBUG_MODE') === 'true';
+        if (file_exists(__DIR__ . '/../../.env')) {
+            $dotenv = Dotenv::createImmutable(__DIR__ . '/../../');
+            $dotenv->load();
+        }
     }
 
-    public function get($key)
+    public function get(string $key, $default = null)
     {
-        return $this->config[$key] ?? null;
+        return $this->config[$key] ?? $default;
+    }
+
+    public function set(string $key, $value): void
+    {
+        $this->config[$key] = $value;
+    }
+
+    public function getDatabaseConfig(): array
+    {
+        return [
+            'host' => getenv('DB_HOST'),
+            'name' => getenv('DB_NAME'),
+            'user' => getenv('DB_USER'),
+            'pass' => getenv('DB_PASS')
+        ];
     }
 }
