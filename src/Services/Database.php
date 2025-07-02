@@ -176,4 +176,28 @@ class Database
         $result = $stmt->fetch();
         return $result ?: null;
     }
+
+    public function findMany(string $table, array $where = [], array $orderBy = [], int $limit = null): array
+    {
+        $sql = "SELECT * FROM {$table}";
+
+        if (!empty($where)) {
+            $whereClause = implode(' AND ', array_map(fn($col) => "{$col}", array_keys($where)));
+            $sql .= " WHERE {$whereClause}";
+        }
+
+        if (!empty($orderBy)) {
+            $orderClause = implode(', ', array_map(fn($col, $dir) => "{$col} {$dir}", array_keys($orderBy), $orderBy));
+            $sql .= " ORDER BY {$orderClause}";
+        }
+
+        if ($limit) {
+            $sql .= " LIMIT {$limit}";
+        }
+
+        $stmt = $this->connection->prepare($sql);
+        $stmt->execute($where);
+
+        return $stmt->fetchAll();
+    }
 }
