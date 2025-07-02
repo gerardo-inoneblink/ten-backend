@@ -158,4 +158,22 @@ class Database
         
         return $stmt->rowCount();
     }
+
+    public function findOne(string $table, array $where = []): ?array
+    {
+        $sql = "SELECT * FROM {$table}";
+        
+        if (!empty($where)) {
+            $whereClause = implode(' AND ', array_map(fn($col) => "{$col} = :{$col}", array_keys($where)));
+            $sql .= " WHERE {$whereClause}";
+        }
+        
+        $sql .= " LIMIT 1";
+        
+        $stmt = $this->connection->prepare($sql);
+        $stmt->execute($where);
+        
+        $result = $stmt->fetch();
+        return $result ?: null;
+    }
 }
