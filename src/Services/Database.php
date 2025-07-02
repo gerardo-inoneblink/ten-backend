@@ -146,4 +146,16 @@ class Database
         
         return $stmt->rowCount();
     }
+
+    public function delete(string $table, array $where): int
+    {
+        $whereClause = implode(' AND ', array_map(fn($col) => "{$col} = :{$col}", array_keys($where)));
+        
+        $sql = "DELETE FROM {$table} WHERE {$whereClause}";
+        
+        $stmt = $this->connection->prepare($sql);
+        $stmt->execute($where);
+        
+        return $stmt->rowCount();
+    }
 }
