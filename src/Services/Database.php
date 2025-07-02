@@ -17,6 +17,7 @@ class Database
     {
         $this->config = AppConfig::getInstance();
         $this->connect();
+        $this->createTables();
     }
 
     public static function getInstance()
@@ -113,5 +114,36 @@ class Database
         $stmt = $this->connection->prepare($sql);
         $stmt->execute($params);
         return $stmt;
+    }
+
+    public function insert(string $table, array $data): int
+    {
+        $columns = implode(', ', array_keys($data));
+        $placeholders = ':' . implode(', :', array_keys($data));
+
+        $sql = "INSERT INTO {$table} ({$columns}) VALUES ({$placeholders})";
+
+        $stmt = $this->connection->prepare($sql);
+        $stmt->execute($data);
+
+        return (int) $this->connection->lastInsertId();
+    }
+
+    public function update(string $table, array $data, array $where): int
+    {
+        $setClause = implode(', ', array_map(fn($col) => "{$col} = :{$col}", array_keys($data)));
+        $whereClause = implode(' AND ', array_map(fn($col) => "{$col} = :where_{$col}", array_keys($where)));
+        
+        $sql = "UPDATE {$table} SET {$setClause} WHERE {$whereClause}";
+        
+        $params = $data;
+        foreach ($where as $key => $value) {
+            $params["where_{$key}"] = $value;
+        }
+        
+        $stmt = $this->connection->prepare($sql);
+        $stmt->execute($params);
+        
+        return $stmt->rowCount();
     }
 }
