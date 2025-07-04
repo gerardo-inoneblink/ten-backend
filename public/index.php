@@ -48,7 +48,6 @@ try {
         return true;
     });
 
-    // Health check endpoint
     $router->get('/', function($request, $response) use ($config, $database) {
         return [
             'success' => true,
@@ -60,13 +59,11 @@ try {
         ];
     });
 
-    // API status endpoint
     $router->get('/api/status', function($request, $response) use ($config, $mindbodyApi) {
         $mindbodyStatus = false;
         try {
             $mindbodyStatus = $mindbodyApi->testConnection();
         } catch (\Exception $e) {
-            // Connection test failed
         }
 
         return [
@@ -81,11 +78,6 @@ try {
         ];
     });
 
-    // =======================
-    // AUTHENTICATION ROUTES
-    // =======================
-
-    // Send OTP via email
     $router->post('/api/auth/email', function($request, $response) use ($otpService, $router, $logger) {
         $email = $request['body']['email'] ?? '';
 
@@ -119,7 +111,6 @@ try {
         }
     });
 
-    // Verify OTP
     $router->post('/api/auth/verify', function($request, $response) use ($otpService, $router) {
         $otpCode = $request['body']['otp_code'] ?? '';
         
@@ -136,13 +127,11 @@ try {
         }
     });
 
-    // Logout
     $router->post('/api/auth/logout', function($request, $response) use ($otpService, $router) {
         $otpService->logout();
         return $router->sendSuccess(null, 'Logged out successfully');
     });
 
-    // Check authentication status
     $router->get('/api/auth/status', function($request, $response) use ($otpService, $sessionService) {
         $isAuthenticated = $otpService->isAuthenticated();
         $client = $sessionService->get('authenticated_client');

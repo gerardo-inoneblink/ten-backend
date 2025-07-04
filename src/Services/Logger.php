@@ -32,13 +32,16 @@ class Logger
     {
         $this->logger = new MonologLogger($this->config->get('APP_NAME', 'FlexKitTen'));
 
-        $logDir = dirname($this->config->get('LOG_FILE'));
+        $projectRoot = dirname(__DIR__, 2);
+        $logFile = $projectRoot . '/' . $this->config->get('LOG_FILE');
+        $logDir = dirname($logFile);
+        
         if (!is_dir($logDir)) {
             mkdir($logDir, 0755, true);
         }
 
         $fileHandler = new RotatingFileHandler(
-            $this->config->get('LOG_FILE'),
+            $logFile,
             7,
             $this->getLogLevel()
         );
