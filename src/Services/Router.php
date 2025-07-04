@@ -130,7 +130,17 @@ class Router
     private function buildRequest(): array
     {
         $input = file_get_contents('php://input');
-        $body = $input ? json_decode($input, true) : [];
+        $body = [];
+        
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        
+        if ($input) {
+            if (strpos($contentType, 'application/json') !== false) {
+                $body = json_decode($input, true) ?: [];
+            } elseif (strpos($contentType, 'application/x-www-form-urlencoded') !== false) {
+                parse_str($input, $body);
+            }
+        }
 
         return [
             'method' => $_SERVER['REQUEST_METHOD'] ?? 'GET',

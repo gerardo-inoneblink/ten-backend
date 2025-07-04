@@ -12,7 +12,6 @@ class Database
     private PDO $connection;
     private AppConfig $config;
 
-
     private function __construct()
     {
         $this->config = AppConfig::getInstance();
@@ -20,7 +19,7 @@ class Database
         $this->createTables();
     }
 
-    public static function getInstance()
+    public static function getInstance(): Database
     {
         if (self::$instance === null) {
             self::$instance = new self();
@@ -32,37 +31,43 @@ class Database
     {
         try {
             $dbConfig = $this->config->getDatabaseConfig();
-
-            $dsn = sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4',
+            
+            $dsn = sprintf(
+                'mysql:host=%s;dbname=%s;charset=utf8mb4',
                 $dbConfig['host'],
                 $dbConfig['name']
             );
 
-            $this->connection = new PDO($dsn, $dbConfig['user'], $dbConfig['pass'], [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
-            ]);
+            $this->connection = new PDO(
+                $dsn,
+                $dbConfig['user'],
+                $dbConfig['pass'],
+                [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false,
+                ]
+            );
         } catch (PDOException $e) {
-            throw new \RuntimeException('Database connection failed: ' . $e->getMessage());
+            throw new \Exception('Database connection failed: ' . $e->getMessage());
         }
     }
 
     private function createTables(): void
     {
-        $this->createOptSessionsTable();
+        $this->createOtpSessionsTable();
         $this->createClientDetailsTable();
     }
 
     private function createOtpSessionsTable(): void
     {
-        $sql = "CREATE TABLE IF NOT EXISTS flexkit_opt_sessions (
+        $sql = "CREATE TABLE IF NOT EXISTS flexkit_otp_sessions (
             id BIGINT(20) NOT NULL AUTO_INCREMENT,
             session_id VARCHAR(255) NOT NULL,
             otp_code VARCHAR(6) NOT NULL,
-            client_id BIGINT(20) NOT NULL,
-            client_email VARCHAR(255) NOT NULL,
-            client_phone VARCHAR(20) NOT NULL,
+            client_id BIGINT(20) NULL,
+            client_email VARCHAR(255) NULL,
+            client_phone VARCHAR(20) NULL,
             delivery_method VARCHAR(10) NOT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             expires_at DATETIME NOT NULL,
@@ -109,7 +114,7 @@ class Database
         return $this->connection;
     }
 
-    public function query(string $sql, array $params = []): PDOStatement
+    public function query(string $sql, array $params = []): \PDOStatement
     {
         $stmt = $this->connection->prepare($sql);
         $stmt->execute($params);
@@ -120,12 +125,12 @@ class Database
     {
         $columns = implode(', ', array_keys($data));
         $placeholders = ':' . implode(', :', array_keys($data));
-
+        
         $sql = "INSERT INTO {$table} ({$columns}) VALUES ({$placeholders})";
-
+        
         $stmt = $this->connection->prepare($sql);
         $stmt->execute($data);
-
+        
         return (int) $this->connection->lastInsertId();
     }
 
@@ -180,24 +185,24 @@ class Database
     public function findMany(string $table, array $where = [], array $orderBy = [], int $limit = null): array
     {
         $sql = "SELECT * FROM {$table}";
-
+        
         if (!empty($where)) {
-            $whereClause = implode(' AND ', array_map(fn($col) => "{$col}", array_keys($where)));
+            $whereClause = implode(' AND ', array_map(fn($col) => "{$col} = :{$col}", array_keys($where)));
             $sql .= " WHERE {$whereClause}";
         }
-
+        
         if (!empty($orderBy)) {
             $orderClause = implode(', ', array_map(fn($col, $dir) => "{$col} {$dir}", array_keys($orderBy), $orderBy));
             $sql .= " ORDER BY {$orderClause}";
         }
-
+        
         if ($limit) {
             $sql .= " LIMIT {$limit}";
         }
-
+        
         $stmt = $this->connection->prepare($sql);
         $stmt->execute($where);
-
+        
         return $stmt->fetchAll();
     }
-}
+} 

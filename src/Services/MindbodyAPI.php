@@ -1,0 +1,283 @@
+<?php
+
+namespace FlexkitTen\Services;
+
+use FlexkitTen\Config\AppConfig;
+
+class MindbodyAPI
+{
+    private string $apiBaseUrl = 'https://api.mindbodyonline.com/public/v6';
+    private array $credentials;
+    private bool $debugMode = false;
+    private Logger $logger;
+    private AppConfig $config;
+    
+    private const MAX_RETRIES = 3;
+    private array $rateLimits = [
+        'requests_per_minute' => 1000,
+        'requests_per_day' => 2000,
+    ];
+
+    private array $requestTracking = [
+        'minute' => ['count' => 0, 'timestamp' => 0],
+        'day' => ['count' => 0, 'timestamp' => 0],
+    ];
+
+    public function __construct()
+    {
+        $this->config = AppConfig::getInstance();
+        $this->logger = Logger::getInstance();
+        $this->debugMode = $this->config->isDebug();
+        
+        $mindbodyConfig = $this->config->getMindbodyConfig();
+        
+        if (empty($mindbodyConfig['api_key'])) {
+            throw new \Exception('API Key is required');
+        }
+        if (empty($mindbodyConfig['site_id'])) {
+            throw new \Exception('Site ID is required');
+        }
+        if (empty($mindbodyConfig['source_name'])) {
+            throw new \Exception('Source Name is required');
+        }
+        if (empty($mindbodyConfig['password'])) {
+            throw new \Exception('Password is required');
+        }
+        
+        $this->credentials = [
+            'api_key' => $mindbodyConfig['api_key'],
+            'site_ids' => [$mindbodyConfig['site_id']],
+            'source_name' => $mindbodyConfig['source_name'],
+            'password' => $mindbodyConfig['password']
+        ];
+
+        $this->logger->logMindbodyApi('API client initialized', [
+            'api_key' => substr($mindbodyConfig['api_key'], 0, 5) . '...',
+            'site_id' => $mindbodyConfig['site_id'],
+            'source_name' => $mindbodyConfig['source_name']
+        ]);
+    }
+
+    private function debugLog(string $message, array $context = []): void
+    {
+        if ($this->debugMode) {
+            $this->logger->logMindbodyApi($message, $context);
+        }
+    }
+
+    private function getFreshToken(string $siteId): string
+    {
+        $this->debugLog('Starting token request', [
+            'site_id' => $siteId,
+            'source_name' => $this->credentials['source_name']
+        ]);
+
+        try {
+            $requestData = [
+                'username' => $this->credentials['source_name'],
+                'password' => $this->credentials['password']
+            ];
+
+            $url = $this->apiBaseUrl . '/usertoken/issue';
+            $headers = [
+                'API-Key: ' . $this->credentials['api_key'],
+                'SiteId: ' . $siteId,
+                'Content-Type: application/json'
+            ];
+
+            $this->debugLog('Making token request', [
+                'url' => $url,
+                'username' => $this->credentials['source_name']
+            ]);
+
+            $response = $this->makeHttpRequest($url, 'POST', $requestData, $headers);
+
+            if (empty($response['AccessToken'])) {
+                $errorMessage = $response['Message'] ?? 'Unknown error';
+                throw new \Exception("Failed to obtain token: {$errorMessage}");
+            }
+
+            $this->debugLog('Token obtained successfully');
+            return $response['AccessToken'];
+
+        } catch (\Exception $e) {
+            $this->debugLog('Token request failed', [
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    private function checkRateLimits(): void
+    {
+        $currentTime = time();
+        
+        if ($currentTime - $this->requestTracking['minute']['timestamp'] >= 60) {
+            $this->requestTracking['minute'] = ['count' => 0, 'timestamp' => $currentTime];
+        }
+        
+        if ($currentTime - $this->requestTracking['day']['timestamp'] >= 86400) {
+            $this->requestTracking['day'] = ['count' => 0, 'timestamp' => $currentTime];
+        }
+        
+        if ($this->requestTracking['minute']['count'] >= $this->rateLimits['requests_per_minute']) {
+            throw new \Exception('Rate limit exceeded: too many requests per minute');
+        }
+        
+        if ($this->requestTracking['day']['count'] >= $this->rateLimits['requests_per_day']) {
+            throw new \Exception('Rate limit exceeded: too many requests per day');
+        }
+        
+        $this->requestTracking['minute']['count']++;
+        $this->requestTracking['day']['count']++;
+    }
+
+    public function makeRequest(string $endpoint, array $params = [], string $method = 'GET', bool $useStaffToken = false): array
+    {
+        $this->checkRateLimits();
+        
+        $siteId = $this->credentials['site_ids'][0];
+        $token = $this->getFreshToken($siteId);
+        
+        $url = $this->apiBaseUrl . $endpoint;
+        
+        $headers = [
+            'API-Key: ' . $this->credentials['api_key'],
+            'SiteId: ' . $siteId,
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json'
+        ];
+
+        $this->logger->logMindbodyApi('Making API request', [
+            'method' => $method,
+            'url' => $url,
+            'params' => $params
+        ]);
+
+        $response = $this->makeHttpRequest($url, $method, $params, $headers);
+        
+        $this->logger->logMindbodyApi('API request successful', [
+            'endpoint' => $endpoint,
+            'response_size' => strlen(json_encode($response))
+        ]);
+
+        return $response;
+    }
+
+    private function makeHttpRequest(string $url, string $method = 'GET', array $data = null, array $headers = []): array
+    {
+        $ch = curl_init();
+        
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+
+        if ($method === 'POST') {
+            curl_setopt($ch, CURLOPT_POST, true);
+            if ($data) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+            }
+        } elseif ($method === 'PUT') {
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+            if ($data) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+            }
+        } elseif ($method === 'DELETE') {
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
+        }
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        
+        curl_close($ch);
+
+        if ($error) {
+            throw new \Exception("cURL error: {$error}");
+        }
+
+        if ($httpCode >= 400) {
+            $this->logger->error("Mindbody API HTTP error", [
+                'http_code' => $httpCode,
+                'response' => $response,
+                'url' => $url,
+                'method' => $method,
+                'headers' => $headers
+            ]);
+            throw new \Exception("HTTP error {$httpCode}: {$response}");
+        }
+
+        $decoded = json_decode($response, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new \Exception("Invalid JSON response: " . json_last_error_msg());
+        }
+
+        return $decoded;
+    }
+
+    public function getClientById(int $clientId, string $siteId = null): ?array
+    {
+        try {
+            $siteId = $siteId ?: $this->getDefaultSiteId();
+            $response = $this->makeRequest('/client/clients', [
+                'clientIds' => [$clientId]
+            ]);
+            
+            if (!empty($response['Clients'])) {
+                return $response['Clients'][0];
+            }
+            
+            return null;
+        } catch (\Exception $e) {
+            $this->logger->error("Failed to get client by ID", [
+                'client_id' => $clientId,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    public function getDefaultSiteId(): string
+    {
+        return $this->credentials['site_ids'][0];
+    }
+
+    public function testConnection(): bool
+    {
+        try {
+            $response = $this->makeRequest('/site/sites');
+            return !empty($response['Sites']);
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    public function searchClientByEmail(string $email): array
+    {
+        try {
+            $this->logger->info('Searching client by email', ['email' => $email]);
+            
+            $response = $this->makeRequest('/client/clients', [
+                'searchText' => $email
+            ]);
+            
+            $this->logger->info('Client search successful', [
+                'email' => $email,
+                'clients_found' => count($response['Clients'] ?? [])
+            ]);
+            
+            return $response;
+        } catch (\Exception $e) {
+            $this->logger->error("Failed to search client by email", [
+                'email' => $email,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+} 
