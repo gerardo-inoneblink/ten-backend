@@ -75,14 +75,14 @@ class Router
             }
 
             $handler = $this->findRoute($method, $path);
-            
+
             if ($handler === null) {
                 $this->sendNotFound();
                 return;
             }
 
             $result = $handler($request, $response);
-            
+
             if (is_array($result) || is_object($result)) {
                 $this->sendJson($result);
             }
@@ -101,9 +101,9 @@ class Router
     private function getPath(): string
     {
         $requestUri = $_SERVER['REQUEST_URI'] ?? '/';
-        
+
         $path = parse_url($requestUri, PHP_URL_PATH);
-        
+
         if ($path !== '/' && str_ends_with($path, '/')) {
             $path = rtrim($path, '/');
         }
@@ -131,9 +131,9 @@ class Router
     {
         $input = file_get_contents('php://input');
         $body = [];
-        
+
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-        
+
         if ($input) {
             if (strpos($contentType, 'application/json') !== false) {
                 $body = json_decode($input, true) ?: [];
@@ -164,7 +164,7 @@ class Router
     private function getAllHeaders(): array
     {
         $headers = [];
-        
+
         foreach ($_SERVER as $key => $value) {
             if (str_starts_with($key, 'HTTP_')) {
                 $headerName = str_replace('_', '-', substr($key, 5));
@@ -216,10 +216,10 @@ class Router
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
         header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-        
+
         if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
             http_response_code(200);
             exit;
         }
     }
-} 
+}

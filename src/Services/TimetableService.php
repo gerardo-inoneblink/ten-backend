@@ -1,0 +1,257 @@
+<?php
+
+namespace FlexkitTen\Services;
+
+class TimetableService
+{
+    private MindbodyAPI $mindbodyApi;
+    private Logger $logger;
+
+    public function __construct(MindbodyAPI $mindbodyApi, Logger $logger)
+    {
+        $this->mindbodyApi = $mindbodyApi;
+        $this->logger = $logger;
+    }
+
+    private function debugLog(string $message, array $context = []): void
+    {
+        $this->logger->logTimetableOperation($message, $context);
+    }
+
+    public function getLocations(): array
+    {
+        $this->debugLog("Fetching locations for timetable filter");
+
+        try {
+            $response = $this->mindbodyApi->makeRequest(
+                '/site/locations',
+                [
+                    'limit' => 100,
+                    'offset' => 0
+                ],
+                'GET'
+            );
+
+            if (!isset($response['Locations'])) {
+                throw new \Exception('Invalid response format');
+            }
+
+            $locations = array_map(function ($location) {
+                if (in_array($location['Id'], [7, 10], true)) {
+                    $this->debugLog("Excluding location ID: " . $location['Id']);
+                    return null;
+                }
+
+                if (!$location['HasClasses']) {
+                    return null;
+                }
+
+                return [
+                    'id' => $location['Id'],
+                    'name' => $location['Name'],
+                    'siteId' => $location['SiteID']
+                ];
+            }, $response['Locations']);
+
+            $locations = array_filter($locations);
+
+            $this->debugLog("Successfully fetched locations", [
+                'count' => count($locations),
+                'excluded_ids' => [7, 10]
+            ]);
+
+            return array_values($locations);
+
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching locations: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    public function getPrograms(string $scheduleType = 'Class'): array
+    {
+        $this->debugLog("Fetching programs for timetable filter", ['type' => $scheduleType]);
+
+        try {
+            $response = $this->mindbodyApi->makeRequest(
+                '/site/programs',
+                [
+                    'limit' => 100,
+                    'offset' => 0,
+                    'scheduleType' => $scheduleType
+                ],
+                'GET'
+            );
+
+            if (!isset($response['Programs'])) {
+                throw new \Exception('Invalid response format');
+            }
+
+            $programs = array_map(function ($program) use ($scheduleType) {
+                if ($scheduleType === 'Class' && $program['Id'] !== 22) {
+                    return null;
+                }
+
+                return [
+                    'id' => $program['Id'],
+                    'name' => $program['Name']
+                ];
+            }, $response['Programs']);
+
+            $programs = array_filter($programs);
+
+            $this->debugLog("Successfully fetched programs", ['count' => count($programs)]);
+            return array_values($programs);
+
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching programs: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    public function getSessionTypes(bool $onlineOnly = true): array
+    {
+        $this->debugLog("Fetching session types for timetable filter", [
+            'online_only' => $onlineOnly
+        ]);
+
+        try {
+            $response = $this->mindbodyApi->getSessionTypes([
+                'onlineOnly' => $onlineOnly
+            ]);
+
+            if (!isset($response['SessionTypes'])) {
+                throw new \Exception('Invalid response format');
+            }
+
+            $sessionTypes = array_map(function ($sessionType) {
+                return [
+                    'id' => $sessionType['Id'],
+                    'name' => $sessionType['Name']
+                ];
+            }, $response['SessionTypes']);
+
+            $this->debugLog("Successfully fetched session types", [
+                'count' => count($sessionTypes),
+                'online_only' => $onlineOnly
+            ]);
+
+            return $sessionTypes;
+
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching session types: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    public function getFilterOptions(bool $onlineOnly = true): array
+    {
+        try {
+            $locations = $this->getLocations();
+            $classPrograms = $this->getPrograms('Class');
+            $appointmentPrograms = $this->getPrograms('Appointment');
+            $sessionTypes = $this->getSessionTypes($onlineOnly);
+
+            return [
+                'locations' => $locations,
+                'programs' => [
+                    'classes' => $classPrograms,
+                    'appointments' => $appointmentPrograms
+                ],
+                'sessionTypes' => $sessionTypes
+            ];
+        } catch (\Exception $e) {
+            $this->logger->error("Error getting filter options: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    public function getTimetableData(array $filters): array
+    {
+        $this->debugLog("Getting timetable data", ['filters' => $filters]);
+
+        try {
+            $scheduleType = $filters['scheduleType'] ?? 'Class';
+
+            if ($scheduleType === 'Class') {
+                return $this->getClassSchedule($filters);
+            } else {
+                return $this->getAppointmentSchedule($filters);
+            }
+        } catch (\Exception $e) {
+            $this->logger->error("Error getting timetable data: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    private function getClassSchedule(array $params): array
+    {
+        $this->debugLog("Fetching class schedule");
+
+        $mindbodyParams = [
+            'startDateTime' => $params['startDate'] ?? date('c'),
+            'endDateTime' => $params['endDate'] ?? date('c', strtotime('+30 days')),
+            'locationIds' => $params['locationIds'] ?? [],
+            'programIds' => $params['programIds'] ?? [],
+            'sessionTypeIds' => $params['sessionTypeIds'] ?? []
+        ];
+
+        $response = $this->mindbodyApi->getClassSchedule($mindbodyParams);
+
+        return $response;
+    }
+
+    private function generateTimeSlots(array $availability): array
+    {
+        $timeSlots = [];
+
+        foreach ($availability as $slot) {
+            if (isset($slot['StartDateTime']) && isset($slot['EndDateTime'])) {
+                $start = new \DateTime($slot['StartDateTime']);
+                $end = new \DateTime($slot['EndDateTime']);
+
+                while ($start < $end) {
+                    $slotEnd = clone $start;
+                    $slotEnd->add(new \DateInterval('PT30M'));
+
+                    if ($slotEnd <= $end) {
+                        $timeSlots[] = [
+                            'start' => $start->format('c'),
+                            'end' => $slotEnd->format('c'),
+                            'available' => true
+                        ];
+                    }
+
+                    $start->add(new \DateInterval('PT30M'));
+                }
+            }
+        }
+
+        return $timeSlots;
+    }
+
+    private function getAppointmentSchedule(array $params): array
+    {
+        $this->debugLog("Fetching appointment schedule");
+
+        $mindbodyParams = [
+            'startDateTime' => $params['startDate'] ?? date('c'),
+            'endDateTime' => $params['endDate'] ?? date('c', strtotime('+30 days')),
+            'locationIds' => $params['locationIds'] ?? [],
+            'staffIds' => $params['staffIds'] ?? [],
+            'sessionTypeIds' => $params['sessionTypeIds'] ?? []
+        ];
+
+        $response = $this->mindbodyApi->makeRequest(
+            '/appointment/appointmenttimes',
+            $mindbodyParams
+        );
+
+        if (isset($response['AppointmentTimes'])) {
+            $timeSlots = $this->generateTimeSlots($response['AppointmentTimes']);
+            $response['TimeSlots'] = $timeSlots;
+        }
+
+        return $response;
+    }
+}

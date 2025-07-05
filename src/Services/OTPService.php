@@ -11,12 +11,12 @@ class OTPService
     private Logger $logger;
     private AppConfig $config;
     private SessionService $sessionService;
-    
+
     private const OTP_EXPIRY_MINUTES = 10;
 
     public function __construct(
-        Database $database, 
-        MindbodyAPI $mindbodyApi, 
+        Database $database,
+        MindbodyAPI $mindbodyApi,
         Logger $logger,
         SessionService $sessionService
     ) {
@@ -50,7 +50,7 @@ class OTPService
         try {
             $this->logger->logOtpOperation("Searching client by email in Mindbody");
             $response = $this->mindbodyApi->searchClientByEmail($email);
-            
+
             if (empty($response['Clients'])) {
                 throw new \Exception('Client not found in Mindbody system');
             }
@@ -77,11 +77,11 @@ class OTPService
             $this->sessionService->set('mbo_client', $client);
 
             $otp = $this->generateOtp();
-            
+
             $this->cleanupOldOtps($sessionId);
 
             $expiresAt = date('Y-m-d H:i:s', time() + (self::OTP_EXPIRY_MINUTES * 60));
-            
+
             $otpId = $this->database->insert('flexkit_otp_sessions', [
                 'session_id' => $sessionId,
                 'otp_code' => $otp,
@@ -98,7 +98,7 @@ class OTPService
             ]);
 
             $emailSent = $this->sendOtpEmail($email, $otp, $client);
-            
+
             if (!$emailSent) {
                 throw new \Exception('Failed to send OTP email');
             }
@@ -130,7 +130,7 @@ class OTPService
     {
         $clientName = trim(($client['FirstName'] ?? '') . ' ' . ($client['LastName'] ?? ''));
         $subject = 'FlexKit Verification Code';
-        
+
         $message = "Hi " . ($clientName ?: 'there') . ",\n\n";
         $message .= "Your FlexKit verification code is: " . $otp . "\n\n";
         $message .= "This code will expire in " . self::OTP_EXPIRY_MINUTES . " minutes.\n";
@@ -145,7 +145,7 @@ class OTPService
         ];
 
         $environment = $this->config->get('APP_ENV', 'production');
-        
+
         if ($environment === 'development') {
             $this->logger->logOtpOperation("DEVELOPMENT MODE: OTP would be sent", [
                 'email' => $email,
@@ -157,7 +157,7 @@ class OTPService
         }
 
         $result = mail($email, $subject, $message, implode("\r\n", $headers));
-        
+
         if (!$result) {
             $error = error_get_last();
             $this->logger->error("Email sending failed", [
@@ -166,7 +166,7 @@ class OTPService
                 'mail_function_result' => $result
             ]);
         }
-        
+
         $this->logger->logOtpOperation("Email send attempt", [
             'email' => $email,
             'result' => $result ? 'success' : 'failed'
@@ -181,7 +181,7 @@ class OTPService
 
         try {
             $sessionId = $this->sessionService->getSessionId();
-            
+
             $otpRecord = $this->database->findOne('flexkit_otp_sessions', [
                 'session_id' => $sessionId,
                 'otp_code' => $otpCode,
@@ -201,13 +201,14 @@ class OTPService
                 'client_id' => $otpRecord['client_id']
             ]);
 
-            $this->database->update('flexkit_otp_sessions', 
-                ['used' => 1], 
+            $this->database->update(
+                'flexkit_otp_sessions',
+                ['used' => 1],
                 ['id' => $otpRecord['id']]
             );
 
             $client = $this->mindbodyApi->getClientById($otpRecord['client_id']);
-            
+
             if (!$client) {
                 throw new \Exception('Client not found in Mindbody system');
             }
@@ -267,18 +268,19 @@ class OTPService
         ];
 
         if ($existingClient) {
-            $this->database->update('flexkit_client_details', 
-                $clientData, 
+            $this->database->update(
+                'flexkit_client_details',
+                $clientData,
                 ['mindbody_client_id' => $client['Id']]
             );
-            
+
             $this->logger->logOtpOperation("Updated existing client details", [
                 'client_id' => $client['Id']
             ]);
         } else {
             $clientData['mindbody_client_id'] = $client['Id'];
             $this->database->insert('flexkit_client_details', $clientData);
-            
+
             $this->logger->logOtpOperation("Stored new client details", [
                 'client_id' => $client['Id']
             ]);
@@ -288,7 +290,7 @@ class OTPService
     public function getClientDetails(string $sessionId = null): ?array
     {
         $sessionId = $sessionId ?: $this->sessionService->getSessionId();
-        
+
         $clientDetails = $this->database->findOne('flexkit_client_details', [
             'session_id' => $sessionId
         ]);
@@ -311,22 +313,22 @@ class OTPService
     {
         $clientDetails = $this->getClientDetails();
         $sessionClient = $this->sessionService->get('authenticated_client');
-        
+
         return $clientDetails !== null && $sessionClient !== null;
     }
 
     public function logout(): void
     {
         $sessionId = $this->sessionService->getSessionId();
-        
+
         $this->database->delete('flexkit_client_details', [
             'session_id' => $sessionId
         ]);
 
         $this->sessionService->clear();
-        
+
         $this->logger->logOtpOperation("User logged out", [
             'session_id' => $sessionId
         ]);
     }
-} 
+}

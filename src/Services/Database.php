@@ -31,7 +31,7 @@ class Database
     {
         try {
             $dbConfig = $this->config->getDatabaseConfig();
-            
+
             $dsn = sprintf(
                 'mysql:host=%s;dbname=%s;charset=utf8mb4',
                 $dbConfig['host'],
@@ -125,12 +125,12 @@ class Database
     {
         $columns = implode(', ', array_keys($data));
         $placeholders = ':' . implode(', :', array_keys($data));
-        
+
         $sql = "INSERT INTO {$table} ({$columns}) VALUES ({$placeholders})";
-        
+
         $stmt = $this->connection->prepare($sql);
         $stmt->execute($data);
-        
+
         return (int) $this->connection->lastInsertId();
     }
 
@@ -138,46 +138,46 @@ class Database
     {
         $setClause = implode(', ', array_map(fn($col) => "{$col} = :{$col}", array_keys($data)));
         $whereClause = implode(' AND ', array_map(fn($col) => "{$col} = :where_{$col}", array_keys($where)));
-        
+
         $sql = "UPDATE {$table} SET {$setClause} WHERE {$whereClause}";
-        
+
         $params = $data;
         foreach ($where as $key => $value) {
             $params["where_{$key}"] = $value;
         }
-        
+
         $stmt = $this->connection->prepare($sql);
         $stmt->execute($params);
-        
+
         return $stmt->rowCount();
     }
 
     public function delete(string $table, array $where): int
     {
         $whereClause = implode(' AND ', array_map(fn($col) => "{$col} = :{$col}", array_keys($where)));
-        
+
         $sql = "DELETE FROM {$table} WHERE {$whereClause}";
-        
+
         $stmt = $this->connection->prepare($sql);
         $stmt->execute($where);
-        
+
         return $stmt->rowCount();
     }
 
     public function findOne(string $table, array $where = []): ?array
     {
         $sql = "SELECT * FROM {$table}";
-        
+
         if (!empty($where)) {
             $whereClause = implode(' AND ', array_map(fn($col) => "{$col} = :{$col}", array_keys($where)));
             $sql .= " WHERE {$whereClause}";
         }
-        
+
         $sql .= " LIMIT 1";
-        
+
         $stmt = $this->connection->prepare($sql);
         $stmt->execute($where);
-        
+
         $result = $stmt->fetch();
         return $result ?: null;
     }
@@ -185,24 +185,24 @@ class Database
     public function findMany(string $table, array $where = [], array $orderBy = [], int $limit = null): array
     {
         $sql = "SELECT * FROM {$table}";
-        
+
         if (!empty($where)) {
             $whereClause = implode(' AND ', array_map(fn($col) => "{$col} = :{$col}", array_keys($where)));
             $sql .= " WHERE {$whereClause}";
         }
-        
+
         if (!empty($orderBy)) {
             $orderClause = implode(', ', array_map(fn($col, $dir) => "{$col} {$dir}", array_keys($orderBy), $orderBy));
             $sql .= " ORDER BY {$orderClause}";
         }
-        
+
         if ($limit) {
             $sql .= " LIMIT {$limit}";
         }
-        
+
         $stmt = $this->connection->prepare($sql);
         $stmt->execute($where);
-        
+
         return $stmt->fetchAll();
     }
-} 
+}

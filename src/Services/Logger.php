@@ -32,12 +32,13 @@ class Logger
     {
         $this->logger = new MonologLogger($this->config->get('APP_NAME', 'FlexKitTen'));
 
-        $projectRoot = dirname(__DIR__, 2);
-        $logFile = $projectRoot . '/' . $this->config->get('LOG_FILE');
+        $logFile = $this->config->get('LOG_FILE');
         $logDir = dirname($logFile);
-        
+
         if (!is_dir($logDir)) {
-            mkdir($logDir, 0755, true);
+            if (!mkdir($logDir, 0755, true)) {
+                throw new \RuntimeException("Failed to create log directory: {$logDir}");
+            }
         }
 
         $fileHandler = new RotatingFileHandler(
@@ -64,8 +65,8 @@ class Logger
     private function getLogLevel(): int
     {
         $level = strtolower($this->config->get('LOG_LEVEL', 'info'));
-        
-        return match($level) {
+
+        return match ($level) {
             'debug' => MonologLogger::DEBUG,
             'info' => MonologLogger::INFO,
             'notice' => MonologLogger::NOTICE,
@@ -138,13 +139,8 @@ class Logger
         $this->info('[SESSION] ' . $message, $context);
     }
 
-    public function logBookingOperation(string $message, array $context = []): void
-    {
-        $this->info('[BOOKING] ' . $message, $context);
-    }
-
     public function logTimetableOperation(string $message, array $context = []): void
     {
         $this->info('[TIMETABLE] ' . $message, $context);
     }
-} 
+}

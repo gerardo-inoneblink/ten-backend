@@ -38,7 +38,7 @@ class SessionService
             ]);
 
             session_start();
-            
+
             $this->logger->logSessionOperation("Session initialized", [
                 'session_id' => $this->getSessionId(),
                 'secure' => isset($_SERVER['HTTPS'])
@@ -55,18 +55,18 @@ class SessionService
     {
         session_regenerate_id(true);
         $newSessionId = session_id();
-        
+
         $this->logger->logSessionOperation("Session ID regenerated", [
             'new_session_id' => $newSessionId
         ]);
-        
+
         return $newSessionId;
     }
 
     public function set(string $key, $value): void
     {
         $_SESSION[$key] = $value;
-        
+
         $this->logger->debug("Session value set", [
             'key' => $key,
             'session_id' => $this->getSessionId()
@@ -86,7 +86,7 @@ class SessionService
     public function remove(string $key): void
     {
         unset($_SESSION[$key]);
-        
+
         $this->logger->debug("Session value removed", [
             'key' => $key,
             'session_id' => $this->getSessionId()
@@ -97,7 +97,7 @@ class SessionService
     {
         $sessionId = $this->getSessionId();
         $_SESSION = [];
-        
+
         $this->logger->logSessionOperation("Session cleared", [
             'session_id' => $sessionId
         ]);
@@ -106,15 +106,15 @@ class SessionService
     public function destroy(): void
     {
         $sessionId = $this->getSessionId();
-        
+
         $_SESSION = [];
-        
+
         if (isset($_COOKIE[session_name()])) {
             setcookie(session_name(), '', time() - 3600, '/');
         }
-        
+
         session_destroy();
-        
+
         $this->logger->logSessionOperation("Session destroyed", [
             'session_id' => $sessionId
         ]);
@@ -123,11 +123,11 @@ class SessionService
     public function isExpired(): bool
     {
         $lastActivity = $this->get('last_activity');
-        
+
         if (!$lastActivity) {
             return true;
         }
-        
+
         $maxLifetime = 30 * 24 * 3600;
         return (time() - $lastActivity) > $maxLifetime;
     }
@@ -161,7 +161,7 @@ class SessionService
     public function getFlashMessages(): array
     {
         $messages = [];
-        
+
         foreach ($_SESSION as $key => $value) {
             if (str_starts_with($key, '_flash_')) {
                 $messageKey = substr($key, 7);
@@ -169,7 +169,7 @@ class SessionService
                 unset($_SESSION[$key]);
             }
         }
-        
+
         return $messages;
     }
-} 
+}

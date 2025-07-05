@@ -11,7 +11,7 @@ class MindbodyAPI
     private bool $debugMode = false;
     private Logger $logger;
     private AppConfig $config;
-    
+
     private const MAX_RETRIES = 3;
     private array $rateLimits = [
         'requests_per_minute' => 1000,
@@ -28,9 +28,9 @@ class MindbodyAPI
         $this->config = AppConfig::getInstance();
         $this->logger = Logger::getInstance();
         $this->debugMode = $this->config->isDebug();
-        
+
         $mindbodyConfig = $this->config->getMindbodyConfig();
-        
+
         if (empty($mindbodyConfig['api_key'])) {
             throw new \Exception('API Key is required');
         }
@@ -43,7 +43,7 @@ class MindbodyAPI
         if (empty($mindbodyConfig['password'])) {
             throw new \Exception('Password is required');
         }
-        
+
         $this->credentials = [
             'api_key' => $mindbodyConfig['api_key'],
             'site_ids' => [$mindbodyConfig['site_id']],
@@ -107,27 +107,56 @@ class MindbodyAPI
             throw $e;
         }
     }
+    private function getFreshStaffToken(): string
+    {
+        $this->logger->info('=== MBO AUTH START ===');
+        $this->logger->info('Site ID: ' . $this->credentials['site_ids'][0]);
+        $this->logger->info('Source Name: ' . $this->credentials['source_name']);
+        $this->logger->info('API Key (first 5 chars): ' . substr($this->credentials['api_key'], 0, 5) . '...');
+
+        $authUrl = $this->apiBaseUrl . '/usertoken/issue';
+        $this->logger->info('Auth URL: ' . $authUrl);
+
+        $headers = [
+            'API-Key: ' . $this->credentials['api_key'],
+            'SiteId: ' . $this->credentials['site_ids'][0],
+            'Content-Type: application/json'
+        ];
+
+        $body = [
+            'username' => $this->credentials['source_name'],
+            'password' => $this->credentials['password']
+        ];
+
+        $response = $this->makeHttpRequest($authUrl, 'POST', $body, $headers);
+
+        if (empty($response['AccessToken'])) {
+            throw new \Exception('Failed to obtain staff token');
+        }
+
+        return $response['AccessToken'];
+    }
 
     private function checkRateLimits(): void
     {
         $currentTime = time();
-        
+
         if ($currentTime - $this->requestTracking['minute']['timestamp'] >= 60) {
             $this->requestTracking['minute'] = ['count' => 0, 'timestamp' => $currentTime];
         }
-        
+
         if ($currentTime - $this->requestTracking['day']['timestamp'] >= 86400) {
             $this->requestTracking['day'] = ['count' => 0, 'timestamp' => $currentTime];
         }
-        
+
         if ($this->requestTracking['minute']['count'] >= $this->rateLimits['requests_per_minute']) {
             throw new \Exception('Rate limit exceeded: too many requests per minute');
         }
-        
+
         if ($this->requestTracking['day']['count'] >= $this->rateLimits['requests_per_day']) {
             throw new \Exception('Rate limit exceeded: too many requests per day');
         }
-        
+
         $this->requestTracking['minute']['count']++;
         $this->requestTracking['day']['count']++;
     }
@@ -135,39 +164,62 @@ class MindbodyAPI
     public function makeRequest(string $endpoint, array $params = [], string $method = 'GET', bool $useStaffToken = false): array
     {
         $this->checkRateLimits();
-        
-        $siteId = $this->credentials['site_ids'][0];
-        $token = $this->getFreshToken($siteId);
-        
-        $url = $this->apiBaseUrl . $endpoint;
-        
-        $headers = [
-            'API-Key: ' . $this->credentials['api_key'],
-            'SiteId: ' . $siteId,
-            'Authorization: Bearer ' . $token,
-            'Content-Type: application/json'
-        ];
 
-        $this->logger->logMindbodyApi('Making API request', [
-            'method' => $method,
-            'url' => $url,
-            'params' => $params
-        ]);
+        $retries = 0;
+        while ($retries < self::MAX_RETRIES) {
+            try {
+                $siteId = $this->getDefaultSiteId();
+                $token = $useStaffToken ? $this->getFreshStaffToken() : $this->getFreshToken($siteId);
 
-        $response = $this->makeHttpRequest($url, $method, $params, $headers);
-        
-        $this->logger->logMindbodyApi('API request successful', [
-            'endpoint' => $endpoint,
-            'response_size' => strlen(json_encode($response))
-        ]);
+                $url = $this->apiBaseUrl . $endpoint;
+                $headers = [
+                    'API-Key: ' . $this->credentials['api_key'],
+                    'SiteId: ' . $siteId,
+                    'Authorization: ' . $token,
+                    'Content-Type: application/json'
+                ];
 
-        return $response;
+                if ($method === 'GET' && !empty($params)) {
+                    $url .= '?' . http_build_query($params);
+                    $data = null;
+                } else {
+                    $data = $params;
+                }
+
+                $this->debugLog("Making API request", [
+                    'method' => $method,
+                    'url' => $url,
+                    'params' => $params
+                ]);
+
+                $response = $this->makeHttpRequest($url, $method, $data, $headers);
+
+                $this->debugLog("API request successful", [
+                    'endpoint' => $endpoint,
+                    'response_size' => strlen(json_encode($response))
+                ]);
+
+                return $response;
+
+            } catch (\Exception $e) {
+                $retries++;
+                $this->logger->warning("API request failed (attempt {$retries}): " . $e->getMessage());
+
+                if ($retries >= self::MAX_RETRIES) {
+                    throw new \Exception("API request failed after " . self::MAX_RETRIES . " attempts: " . $e->getMessage());
+                }
+
+                sleep(1);
+            }
+        }
+
+        throw new \Exception('Maximum retries exceeded');
     }
 
     private function makeHttpRequest(string $url, string $method = 'GET', array $data = null, array $headers = []): array
     {
         $ch = curl_init();
-        
+
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
@@ -194,7 +246,7 @@ class MindbodyAPI
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        
+
         curl_close($ch);
 
         if ($error) {
@@ -223,23 +275,55 @@ class MindbodyAPI
     public function getClientById(int $clientId, string $siteId = null): ?array
     {
         try {
-            $siteId = $siteId ?: $this->getDefaultSiteId();
             $response = $this->makeRequest('/client/clients', [
                 'clientIds' => [$clientId]
             ]);
-            
-            if (!empty($response['Clients'])) {
-                return $response['Clients'][0];
-            }
-            
-            return null;
+
+            return $response['Clients'][0] ?? null;
         } catch (\Exception $e) {
-            $this->logger->error("Failed to get client by ID", [
-                'client_id' => $clientId,
-                'error' => $e->getMessage()
-            ]);
+            $this->logger->error("Error fetching client by ID: " . $e->getMessage());
             return null;
         }
+    }
+
+    public function getClientByEmail(string $email, string $siteId = null): ?array
+    {
+        try {
+            $response = $this->makeRequest('/client/clients', [
+                'searchText' => $email
+            ]);
+
+            foreach ($response['Clients'] ?? [] as $client) {
+                if (strtolower($client['Email']) === strtolower($email)) {
+                    return $client;
+                }
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching client by email: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    public function getClassSchedule(array $params = []): array
+    {
+        $defaultParams = [
+            'startDateTime' => date('c'),
+            'endDateTime' => date('c', strtotime('+30 days')),
+            'locationIds' => [],
+            'programIds' => [],
+            'sessionTypeIds' => []
+        ];
+
+        $params = array_merge($defaultParams, $params);
+
+        return $this->makeRequest('/class/classes', $params);
+    }
+
+    public function getSessionTypes(array $params = []): array
+    {
+        return $this->makeRequest('/site/sessiontypes', $params);
     }
 
     public function getDefaultSiteId(): string
@@ -250,34 +334,32 @@ class MindbodyAPI
     public function testConnection(): bool
     {
         try {
-            $response = $this->makeRequest('/site/sites');
-            return !empty($response['Sites']);
+            $this->makeRequest('/site/sites');
+            return true;
         } catch (\Exception $e) {
+            $this->logger->error("Connection test failed: " . $e->getMessage());
             return false;
         }
     }
 
     public function searchClientByEmail(string $email): array
     {
+        $this->logger->info("Searching client by email", ['email' => $email]);
         try {
-            $this->logger->info('Searching client by email', ['email' => $email]);
-            
             $response = $this->makeRequest('/client/clients', [
                 'searchText' => $email
             ]);
-            
-            $this->logger->info('Client search successful', [
+            $this->logger->info("Client search successful", [
                 'email' => $email,
                 'clients_found' => count($response['Clients'] ?? [])
             ]);
-            
             return $response;
         } catch (\Exception $e) {
-            $this->logger->error("Failed to search client by email", [
+            $this->logger->error("Client search failed", [
                 'email' => $email,
                 'error' => $e->getMessage()
             ]);
             throw $e;
         }
     }
-} 
+}

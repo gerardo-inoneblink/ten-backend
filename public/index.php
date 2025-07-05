@@ -9,6 +9,7 @@ use FlexkitTen\Services\Router;
 use FlexkitTen\Services\MindbodyAPI;
 use FlexkitTen\Services\OTPService;
 use FlexkitTen\Services\SessionService;
+use FlexkitTen\Services\TimetableService;
 
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
@@ -22,8 +23,9 @@ try {
 
     $mindbodyApi = new MindbodyAPI();
     $otpService = new OTPService($database, $mindbodyApi, $logger, $sessionService);
+    $timetableService = new TimetableService($mindbodyApi, $logger);
 
-    $logger->info("FlexKit Ten Auth API started", [
+    $logger->info("FlexKit Ten application started", [
         'request_uri' => $_SERVER['REQUEST_URI'] ?? '/',
         'method' => $_SERVER['REQUEST_METHOD'] ?? 'GET',
         'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown'
@@ -33,12 +35,12 @@ try {
 
     $sessionService->updateActivity();
 
-    $router->addMiddleware(function($request, $response) use ($logger) {
+    $router->addMiddleware(function ($request, $response) use ($logger) {
         $logger->debug("CORS middleware processed");
         return true;
     });
 
-    $router->addMiddleware(function($request, $response) use ($logger) {
+    $router->addMiddleware(function ($request, $response) use ($logger) {
         $logger->info("Request received", [
             'method' => $request['method'],
             'path' => $request['path'],
@@ -48,10 +50,10 @@ try {
         return true;
     });
 
-    $router->get('/', function($request, $response) use ($config, $database) {
+    $router->get('/', function ($request, $response) use ($config, $database) {
         return [
             'success' => true,
-            'message' => 'FlexKit Ten Auth API is running',
+            'message' => 'FlexKit Ten API is running',
             'version' => '1.0.0',
             'environment' => $config->get('APP_ENV'),
             'database_connected' => true,
@@ -59,7 +61,7 @@ try {
         ];
     });
 
-    $router->get('/api/status', function($request, $response) use ($config, $mindbodyApi) {
+    $router->get('/api/status', function ($request, $response) use ($config, $mindbodyApi) {
         $mindbodyStatus = false;
         try {
             $mindbodyStatus = $mindbodyApi->testConnection();
@@ -78,7 +80,7 @@ try {
         ];
     });
 
-    $router->post('/api/auth/email', function($request, $response) use ($otpService, $router, $logger) {
+    $router->post('/api/auth/email', function ($request, $response) use ($otpService, $router, $logger) {
         $email = $request['body']['email'] ?? '';
 
         if (empty($email)) {
@@ -92,7 +94,7 @@ try {
         try {
             $logger->info("Starting email OTP process", ['email' => $email]);
             $result = $otpService->sendEmailOtp($email);
-            
+
             if ($result['success']) {
                 return $router->sendSuccess($result, 'OTP sent successfully');
             } else {
@@ -111,15 +113,15 @@ try {
         }
     });
 
-    $router->post('/api/auth/verify', function($request, $response) use ($otpService, $router) {
+    $router->post('/api/auth/verify', function ($request, $response) use ($otpService, $router) {
         $otpCode = $request['body']['otp_code'] ?? '';
-        
+
         if (empty($otpCode)) {
             return $router->sendError('OTP code is required', 400);
         }
 
         $result = $otpService->verifyOtp($otpCode);
-        
+
         if ($result['success']) {
             return $router->sendSuccess($result, 'Authentication successful');
         } else {
@@ -127,15 +129,15 @@ try {
         }
     });
 
-    $router->post('/api/auth/logout', function($request, $response) use ($otpService, $router) {
+    $router->post('/api/auth/logout', function ($request, $response) use ($otpService, $router) {
         $otpService->logout();
         return $router->sendSuccess(null, 'Logged out successfully');
     });
 
-    $router->get('/api/auth/status', function($request, $response) use ($otpService, $sessionService) {
+    $router->get('/api/auth/status', function ($request, $response) use ($otpService, $sessionService) {
         $isAuthenticated = $otpService->isAuthenticated();
         $client = $sessionService->get('authenticated_client');
-        
+
         return [
             'authenticated' => $isAuthenticated,
             'client' => $isAuthenticated ? [
@@ -148,12 +150,40 @@ try {
         ];
     });
 
+    $router->get('/api/timetable/filters', function ($request, $response) use ($timetableService, $router) {
+        try {
+            $onlineOnly = ($request['query']['online_only'] ?? 'true') === 'true';
+            $filters = $timetableService->getFilterOptions($onlineOnly);
+            return $router->sendSuccess($filters, 'Filter options retrieved successfully');
+        } catch (\Exception $e) {
+            return $router->sendError('Failed to get filter options: ' . $e->getMessage(), 500);
+        }
+    });
+
+    $router->get('/api/timetable/data', function ($request, $response) use ($timetableService, $router) {
+        try {
+            $filters = [
+                'scheduleType' => $request['query']['schedule_type'] ?? 'Class',
+                'startDate' => $request['query']['start_date'] ?? date('c'),
+                'endDate' => $request['query']['end_date'] ?? date('c', strtotime('+30 days')),
+                'locationIds' => isset($request['query']['location_ids']) ? explode(',', $request['query']['location_ids']) : [],
+                'programIds' => isset($request['query']['program_ids']) ? explode(',', $request['query']['program_ids']) : [],
+                'sessionTypeIds' => isset($request['query']['session_type_ids']) ? explode(',', $request['query']['session_type_ids']) : []
+            ];
+
+            $data = $timetableService->getTimetableData($filters);
+            return $router->sendSuccess($data, 'Timetable data retrieved successfully');
+        } catch (\Exception $e) {
+            return $router->sendError('Failed to get timetable data: ' . $e->getMessage(), 500);
+        }
+    });
+
     $router->handle();
 
 } catch (\Throwable $e) {
     $errorMessage = 'Internal Server Error';
     $statusCode = 500;
-    
+
     if (isset($logger)) {
         $logger->critical('Application error: ' . $e->getMessage(), [
             'file' => $e->getFile(),
@@ -171,4 +201,4 @@ try {
         'message' => $errorMessage,
         'status' => $statusCode
     ], JSON_PRETTY_PRINT);
-} 
+}
