@@ -254,4 +254,164 @@ class TimetableService
 
         return $response;
     }
+
+    public function bookClass(int $clientId, int $classId, bool $sendEmail = true): array
+    {
+        $this->debugLog("Booking class", [
+            'client_id' => $clientId,
+            'class_id' => $classId,
+            'send_email' => $sendEmail
+        ]);
+
+        try {
+            $response = $this->mindbodyApi->addClientToClass($clientId, $classId);
+
+            $this->debugLog("Class booking successful", [
+                'client_id' => $clientId,
+                'class_id' => $classId
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Class booked successfully',
+                'booking_data' => $response
+            ];
+
+        } catch (\Exception $e) {
+            $this->logger->error("Class booking failed: " . $e->getMessage(), [
+                'client_id' => $clientId,
+                'class_id' => $classId
+            ]);
+
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function cancelClass(int $clientId, int $classId): array
+    {
+        $this->debugLog("Cancelling class", [
+            'client_id' => $clientId,
+            'class_id' => $classId
+        ]);
+
+        try {
+            $response = $this->mindbodyApi->makeRequest(
+                '/class/removeclientfromclass',
+                [
+                    'clientId' => $clientId,
+                    'classId' => $classId
+                ],
+                'POST'
+            );
+
+            $this->debugLog("Class cancellation successful", [
+                'client_id' => $clientId,
+                'class_id' => $classId
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Class cancelled successfully',
+                'cancellation_data' => $response
+            ];
+
+        } catch (\Exception $e) {
+            $this->logger->error("Class cancellation failed: " . $e->getMessage(), [
+                'client_id' => $clientId,
+                'class_id' => $classId
+            ]);
+
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function bookAppointment(int $clientId, array $appointmentData): array
+    {
+        $this->debugLog("Booking appointment", [
+            'client_id' => $clientId,
+            'appointment_data' => $appointmentData
+        ]);
+
+        try {
+            $response = $this->mindbodyApi->makeRequest(
+                '/appointment/addappointment',
+                array_merge($appointmentData, ['clientId' => $clientId]),
+                'POST'
+            );
+
+            $this->debugLog("Appointment booking successful", [
+                'client_id' => $clientId
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Appointment booked successfully',
+                'booking_data' => $response
+            ];
+
+        } catch (\Exception $e) {
+            $this->logger->error("Appointment booking failed: " . $e->getMessage(), [
+                'client_id' => $clientId
+            ]);
+
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function cancelAppointment(int $appointmentId, bool $sendEmail = true, bool $lateCancel = false): array
+    {
+        $this->debugLog("Cancelling appointment", [
+            'appointment_id' => $appointmentId,
+            'send_email' => $sendEmail,
+            'late_cancel' => $lateCancel
+        ]);
+
+        try {
+            $requestData = [
+                'appointmentId' => $appointmentId,
+                'status' => 'Cancelled',
+                'sendEmail' => $sendEmail,
+                'lateCancel' => $lateCancel
+            ];
+
+            $response = $this->mindbodyApi->makeRequest(
+                '/appointment/updateappointment',
+                $requestData,
+                'POST'
+            );
+
+            $this->debugLog("Appointment cancellation successful", [
+                'appointment_id' => $appointmentId,
+                'send_email' => $sendEmail,
+                'late_cancel' => $lateCancel
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Appointment cancelled successfully',
+                'cancellation_data' => $response
+            ];
+
+        } catch (\Exception $e) {
+            $this->logger->error("Appointment cancellation failed: " . $e->getMessage(), [
+                'appointment_id' => $appointmentId,
+                'send_email' => $sendEmail,
+                'late_cancel' => $lateCancel
+            ]);
+
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
 }

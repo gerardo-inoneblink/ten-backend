@@ -107,6 +107,7 @@ class MindbodyAPI
             throw $e;
         }
     }
+
     private function getFreshStaffToken(): string
     {
         $this->logger->info('=== MBO AUTH START ===');
@@ -342,6 +343,34 @@ class MindbodyAPI
         }
     }
 
+    public function addClientToClass(int $clientId, int $classId, string $siteId = null): array
+    {
+        return $this->makeRequest('/class/addclienttoclass', [
+            'clientId' => $clientId,
+            'classId' => $classId
+        ], 'POST');
+    }
+
+    public function createClient(array $clientData): array
+    {
+        return $this->makeRequest('/client/addclient', $clientData, 'POST');
+    }
+
+    public function updateClient(array $clientData, string $siteId = null): array
+    {
+        return $this->makeRequest('/client/updateclient', $clientData, 'POST');
+    }
+
+    public function getServices(string $siteId = null): array
+    {
+        return $this->makeRequest('/sale/services');
+    }
+
+    public function purchaseContract(array $purchaseData): array
+    {
+        return $this->makeRequest('/sale/checkoutshoppingcart', $purchaseData, 'POST', true);
+    }
+
     public function searchClientByEmail(string $email): array
     {
         $this->logger->info("Searching client by email", ['email' => $email]);
@@ -361,5 +390,36 @@ class MindbodyAPI
             ]);
             throw $e;
         }
+    }
+
+    public function getClientCompleteInfo(int $clientId, string $siteId, string $startDate = null, string $endDate = null): array
+    {
+        $params = [
+            'clientId' => $clientId
+        ];
+
+        if ($startDate) {
+            $params['startDate'] = $startDate;
+        }
+        if ($endDate) {
+            $params['endDate'] = $endDate;
+        }
+
+        $clientResponse = $this->makeRequest('/client/clients', ['clientIds' => [$clientId]]);
+        $client = $clientResponse['Clients'][0] ?? null;
+
+        if (!$client) {
+            throw new \Exception('Client not found');
+        }
+
+        $scheduleResponse = $this->makeRequest('/client/clientschedule', $params);
+
+        $visitsResponse = $this->makeRequest('/client/clientvisits', $params);
+
+        return [
+            'client' => $client,
+            'schedule' => $scheduleResponse,
+            'visits' => $visitsResponse
+        ];
     }
 }

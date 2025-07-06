@@ -48,7 +48,7 @@ class AppConfig
             'SERVER_HOST' => 'localhost',
             'SERVER_PORT' => '8000',
             'LOG_LEVEL' => 'info',
-            'LOG_FILE' => dirname(__DIR__, 2) . '/logs/application.log'
+            'LOG_FILE' => 'logs/application.log'
         ];
 
         foreach ($defaults as $key => $value) {
@@ -95,4 +95,4 @@ class AppConfig
             'pass' => $this->get('DB_PASS')
         ];
     }
-}
+} 

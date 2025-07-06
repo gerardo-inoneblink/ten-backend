@@ -32,17 +32,13 @@ class Logger
     {
         $this->logger = new MonologLogger($this->config->get('APP_NAME', 'FlexKitTen'));
 
-        $logFile = $this->config->get('LOG_FILE');
-        $logDir = dirname($logFile);
-
+        $logDir = dirname($this->config->get('LOG_FILE'));
         if (!is_dir($logDir)) {
-            if (!mkdir($logDir, 0755, true)) {
-                throw new \RuntimeException("Failed to create log directory: {$logDir}");
-            }
+            mkdir($logDir, 0755, true);
         }
 
         $fileHandler = new RotatingFileHandler(
-            $logFile,
+            $this->config->get('LOG_FILE'),
             7,
             $this->getLogLevel()
         );
@@ -137,6 +133,11 @@ class Logger
     public function logSessionOperation(string $message, array $context = []): void
     {
         $this->info('[SESSION] ' . $message, $context);
+    }
+
+    public function logBookingOperation(string $message, array $context = []): void
+    {
+        $this->info('[BOOKING] ' . $message, $context);
     }
 
     public function logTimetableOperation(string $message, array $context = []): void
