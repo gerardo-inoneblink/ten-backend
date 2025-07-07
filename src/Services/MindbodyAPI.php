@@ -368,7 +368,44 @@ class MindbodyAPI
 
     public function purchaseContract(array $purchaseData): array
     {
-        return $this->makeRequest('/sale/checkoutshoppingcart', $purchaseData, 'POST', true);
+        $clientId = $purchaseData['clientId'] ?? null;
+        $contractId = $purchaseData['contract_id'] ?? null;
+        $creditCard = $purchaseData['credit_card'] ?? [];
+        $promotionCode = $purchaseData['promotion_code'] ?? null;
+
+        if (!$clientId) {
+            throw new \Exception('ClientId is required');
+        }
+
+        if (!$contractId) {
+            throw new \Exception('Contract ID is required');
+        }
+
+        if (empty($creditCard)) {
+            throw new \Exception('Credit card information is required');
+        }
+
+        $params = [
+            'ClientId' => $clientId,
+            'LocationId' => $locationId,
+            'ContractId' => $contractId,
+            'PaymentInfo' => [
+                'CreditCardNumber' => $creditCard['number'] ?? '',
+                'ExpMonth' => $creditCard['exp_month'] ?? '',
+                'ExpYear' => $creditCard['exp_year'] ?? '',
+                'BillingName' => $creditCard['billing_name'] ?? '',
+                'BillingAddress' => $creditCard['billing_address'] ?? '',
+                'BillingCity' => $creditCard['billing_city'] ?? '',
+                'BillingState' => $creditCard['billing_state'] ?? '',
+                'BillingPostalCode' => $creditCard['billing_postal_code'] ?? ''
+            ]
+        ];
+
+        if ($promotionCode) {
+            $params['PromotionCode'] = $promotionCode;
+        }
+
+        return $this->makeRequest('/sale/purchasecontract', $params, 'POST', true);
     }
 
     public function searchClientByEmail(string $email): array
