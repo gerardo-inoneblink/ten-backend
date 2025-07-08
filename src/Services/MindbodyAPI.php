@@ -227,7 +227,11 @@ class MindbodyAPI
             CURLOPT_TIMEOUT => 30,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_USERAGENT => 'FlexKit-Ten/1.0',
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_SSLVERSION => CURL_SSLVERSION_TLSv1_2,
         ]);
 
         if ($method === 'POST') {
@@ -247,6 +251,44 @@ class MindbodyAPI
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
+
+        if ($error && (strpos($error, 'SSL') !== false || strpos($error, 'SSL_ERROR_SYSCALL') !== false)) {
+            $this->logger->warning("SSL error detected, retrying with relaxed SSL settings", ['error' => $error]);
+            
+            curl_close($ch);
+            $ch = curl_init();
+            
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_USERAGENT => 'FlexKit-Ten/1.0',
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                CURLOPT_SSLVERSION => CURL_SSLVERSION_TLSv1_2,
+            ]);
+
+            if ($method === 'POST') {
+                curl_setopt($ch, CURLOPT_POST, true);
+                if ($data) {
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+                }
+            } elseif ($method === 'PUT') {
+                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+                if ($data) {
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+                }
+            } elseif ($method === 'DELETE') {
+                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
+            }
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+        }
 
         curl_close($ch);
 
@@ -366,43 +408,171 @@ class MindbodyAPI
         return $this->makeRequest('/sale/services');
     }
 
+    public function getServiceById(int $serviceId, string $siteId = null): ?array
+    {
+        $siteId = $siteId ?: $this->getDefaultSiteId();
+        
+        $this->logger->info("Fetching service by ID", [
+            'service_id' => $serviceId,
+            'site_id' => $siteId
+        ]);
+        
+        try {
+            $response = $this->makeRequest('/sale/services', [
+                'ServiceIds' => [$serviceId],
+                'LocationId' => $siteId,
+                'SoldOnline' => true
+            ], 'GET', true);
+            
+            $service = $response['Services'][0] ?? null;
+            
+            if ($service) {
+                $this->logger->info("Service found", [
+                    'service_id' => $serviceId,
+                    'service_name' => $service['Name'] ?? 'Unknown'
+                ]);
+            } else {
+                $this->logger->warning("Service not found", ['service_id' => $serviceId]);
+            }
+            
+            return $service;
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching service by ID: " . $e->getMessage(), [
+                'service_id' => $serviceId,
+                'site_id' => $siteId
+            ]);
+            throw $e;
+        }
+    }
+
+    public function getContracts(string $siteId = null, int $locationId = null): array
+    {
+        $siteId = $siteId ?: $this->getDefaultSiteId();
+        $locationId = $locationId ?: 1;
+        
+        $this->logger->info("Fetching contracts", [
+            'site_id' => $siteId,
+            'location_id' => $locationId
+        ]);
+        
+        try {
+            $response = $this->makeRequest('/sale/contracts', [
+                'limit' => 100,
+                'offset' => 0,
+                'LocationId' => $locationId,
+                'SoldOnline' => true
+            ], 'GET', true);
+            
+            $this->logger->info("Contracts fetched successfully", [
+                'site_id' => $siteId,
+                'location_id' => $locationId,
+                'contracts_count' => count($response['Contracts'] ?? [])
+            ]);
+            
+            return $response;
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching contracts: " . $e->getMessage(), [
+                'site_id' => $siteId,
+                'location_id' => $locationId
+            ]);
+            throw $e;
+        }
+    }
+
+    public function getContractById(int $contractId, string $siteId = null, int $locationId = null): ?array
+    {
+        $siteId = $siteId ?: $this->getDefaultSiteId();
+        $locationId = $locationId ?: 1;
+        
+        $this->logger->info("Fetching contract by ID", [
+            'contract_id' => $contractId,
+            'site_id' => $siteId,
+            'location_id' => $locationId
+        ]);
+        
+        try {
+            $response = $this->makeRequest('/sale/contracts', [
+                'ContractIds' => [$contractId],
+                'LocationId' => $locationId,
+                'SoldOnline' => true
+            ], 'GET', true);
+            
+            $contract = $response['Contracts'][0] ?? null;
+            
+            if ($contract) {
+                $this->logger->info("Contract found", [
+                    'contract_id' => $contractId,
+                    'contract_name' => $contract['Name'] ?? 'Unknown'
+                ]);
+            } else {
+                $this->logger->warning("Contract not found", ['contract_id' => $contractId]);
+            }
+            
+            return $contract;
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching contract by ID: " . $e->getMessage(), [
+                'contract_id' => $contractId,
+                'site_id' => $siteId,
+                'location_id' => $locationId
+            ]);
+            throw $e;
+        }
+    }
+
     public function purchaseContract(array $purchaseData): array
     {
-        $clientId = $purchaseData['clientId'] ?? null;
-        $contractId = $purchaseData['contract_id'] ?? null;
-        $creditCard = $purchaseData['credit_card'] ?? [];
-        $promotionCode = $purchaseData['promotion_code'] ?? null;
-
-        if (!$clientId) {
+        if (empty($purchaseData['clientId'])) {
             throw new \Exception('ClientId is required');
         }
 
-        if (!$contractId) {
-            throw new \Exception('Contract ID is required');
+        if (empty($purchaseData['contract_id'])) {
+            throw new \Exception('ContractId is required');
         }
 
-        if (empty($creditCard)) {
-            throw new \Exception('Credit card information is required');
+        if (empty($purchaseData['location_id'])) {
+            throw new \Exception('LocationId is required');
         }
+
+        $paymentType = $purchaseData['paymentType'] ?? 'CreditCard';
 
         $params = [
-            'ClientId' => $clientId,
-            'LocationId' => $locationId,
-            'ContractId' => $contractId,
-            'PaymentInfo' => [
-                'CreditCardNumber' => $creditCard['number'] ?? '',
-                'ExpMonth' => $creditCard['exp_month'] ?? '',
-                'ExpYear' => $creditCard['exp_year'] ?? '',
-                'BillingName' => $creditCard['billing_name'] ?? '',
-                'BillingAddress' => $creditCard['billing_address'] ?? '',
-                'BillingCity' => $creditCard['billing_city'] ?? '',
-                'BillingState' => $creditCard['billing_state'] ?? '',
-                'BillingPostalCode' => $creditCard['billing_postal_code'] ?? ''
-            ]
+            'ClientId' => $purchaseData['clientId'],
+            'LocationId' => $purchaseData['location_id'],
+            'ContractId' => $purchaseData['contract_id'],
+            'PaymentType' => $paymentType,
         ];
 
-        if ($promotionCode) {
-            $params['PromotionCode'] = $promotionCode;
+        if (!empty($purchaseData['promotion_code'])) {
+            $params['PromotionCode'] = $purchaseData['promotion_code'];
+        }
+        if (isset($purchaseData['overridePaymentAmount'])) {
+            $params['OverridePaymentAmount'] = $purchaseData['overridePaymentAmount'];
+        }
+        if (isset($purchaseData['discountAmount'])) {
+            $params['DiscountAmount'] = $purchaseData['discountAmount'];
+        }
+
+        if (in_array($paymentType, ['CreditCard', 'EFT'])) {
+            if (empty($purchaseData['credit_card']) || !is_array($purchaseData['credit_card'])) {
+                throw new \Exception('CreditCard information is required for CreditCard or EFT payment types');
+            }
+
+            $cc = $purchaseData['credit_card'];
+
+            $params['CreditCardInfo'] = [
+                'CreditCardNumber' => $cc['number'] ?? '',
+                'ExpMonth' => isset($cc['exp_month']) ? (int) $cc['exp_month'] : 0,
+                'ExpYear' => isset($cc['exp_year']) ? (int) $cc['exp_year'] : 0,
+                'BillingName' => $cc['billing_name'] ?? '',
+                'BillingAddress' => $cc['billing_address'] ?? '',
+                'BillingCity' => $cc['billing_city'] ?? '',
+                'BillingState' => $cc['billing_state'] ?? '',
+                'BillingPostalCode' => $cc['billing_postal_code'] ?? '',
+            ];
+
+            if (!empty($cc['cvc'])) {
+                $params['CreditCardInfo']['CVV'] = $cc['cvc'];
+            }
         }
 
         return $this->makeRequest('/sale/purchasecontract', $params, 'POST', true);
@@ -458,5 +628,31 @@ class MindbodyAPI
             'schedule' => $scheduleResponse,
             'visits' => $visitsResponse
         ];
+    }
+
+    public function getPromotionCodes(string $siteId = null): array
+    {
+        $siteId = $siteId ?: $this->getDefaultSiteId();
+        
+        $this->logger->info("Fetching promotion codes", ['site_id' => $siteId]);
+        
+        try {
+            $response = $this->makeRequest('/sale/promotions', [
+                'limit' => 100,
+                'offset' => 0
+            ], 'GET', true);
+            
+            $this->logger->info("Promotion codes fetched successfully", [
+                'site_id' => $siteId,
+                'promotions_count' => count($response['Promotions'] ?? [])
+            ]);
+            
+            return $response;
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching promotion codes: " . $e->getMessage(), [
+                'site_id' => $siteId
+            ]);
+            throw $e;
+        }
     }
 }

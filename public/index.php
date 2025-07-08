@@ -348,21 +348,6 @@ try {
         }
     });
 
-    $router->post('/api/purchase/details', function($request, $response) use ($mindbodyApi, $router) {
-        $serviceId = $request['body']['id'] ?? 0;
-        
-        if (empty($serviceId)) {
-            return $router->sendError('Service ID is required', 400);
-        }
-
-        try {
-            $services = $mindbodyApi->getServices();
-            return $router->sendSuccess($services, 'Purchase details retrieved successfully');
-        } catch (\Exception $e) {
-            return $router->sendError('Failed to get purchase details: ' . $e->getMessage(), 500);
-        }
-    });
-
     $router->post('/api/purchase/contract', function($request, $response) use ($mindbodyApi, $otpService, $sessionService, $router) {
         if (!$otpService->isAuthenticated()) {
             return $router->sendError('Authentication required', 401);
@@ -372,6 +357,14 @@ try {
         $purchaseData = $request['body'] ?? [];
         
         $purchaseData['clientId'] = $client['Id'];
+
+        if (empty($purchaseData['contract_id'])) {
+            return $router->sendError('Contract ID is required', 400);
+        }
+
+        if (empty($purchaseData['location_id'])) {
+            return $router->sendError('Location ID is required', 400);
+        }
 
         try {
             $result = $mindbodyApi->purchaseContract($purchaseData);
@@ -396,6 +389,57 @@ try {
             return $router->sendSuccess($result, 'Purchase completed successfully');
         } catch (\Exception $e) {
             return $router->sendError('Failed to complete purchase: ' . $e->getMessage(), 500);
+        }
+    });
+
+    $router->get('/api/contracts', function($request, $response) use ($mindbodyApi, $router) {
+        try {
+            $locationId = isset($request['query']['location_id']) ? (int)$request['query']['location_id'] : null;
+            $contracts = $mindbodyApi->getContracts(null, $locationId);
+            return $router->sendSuccess($contracts, 'Contracts retrieved successfully');
+        } catch (\Exception $e) {
+            return $router->sendError('Failed to get contracts: ' . $e->getMessage(), 500);
+        }
+    });
+
+    $router->get('/api/promotions', function($request, $response) use ($mindbodyApi, $router) {
+        try {
+            $promotions = $mindbodyApi->getPromotionCodes();
+            return $router->sendSuccess($promotions, 'Promotion codes retrieved successfully');
+        } catch (\Exception $e) {
+            return $router->sendError('Failed to get promotion codes: ' . $e->getMessage(), 500);
+        }
+    });
+
+    $router->post('/api/purchase/details', function($request, $response) use ($mindbodyApi, $router) {
+        $type = $request['body']['type'] ?? 'service';
+        $id = $request['body']['id'] ?? 0;
+        
+        if (empty($id)) {
+            return $router->sendError('ID is required', 400);
+        }
+        
+        try {
+            if ($type === 'contract') {
+                $locationId = isset($request['body']['location_id']) ? (int)$request['body']['location_id'] : null;
+                $contract = $mindbodyApi->getContractById((int)$id, null, $locationId);
+                
+                if (!$contract) {
+                    return $router->sendError('Contract not found', 404);
+                }
+                
+                return $router->sendSuccess($contract, 'Contract details retrieved successfully');
+            } else {
+                $service = $mindbodyApi->getServiceById((int)$id);
+                
+                if (!$service) {
+                    return $router->sendError('Service not found', 404);
+                }
+                
+                return $router->sendSuccess($service, 'Service details retrieved successfully');
+            }
+        } catch (\Exception $e) {
+            return $router->sendError('Failed to get purchase details: ' . $e->getMessage(), 500);
         }
     });
 
