@@ -339,10 +339,100 @@ class TimetableService
         ]);
 
         try {
+            $sessionTypeId = $appointmentData['sessionTypeId'] ?? null;
+            // Check client services for this session type
+            $this->debugLog("Checking client services for session type", [
+                'client_id' => $clientId,
+                'session_type_id' => $sessionTypeId
+            ]);
+            $services = $this->mindbodyApi->getClientServices($clientId, $sessionTypeId);
+            
+            if (empty($services['ClientServices'])) {
+                $this->logger->error("No valid services found for client", [
+                    'client_id' => $clientId,
+                    'session_type_id' => $sessionTypeId
+                ]);
+                
+                // Check if client has any active services at all
+                $allServices = $this->mindbodyApi->getClientServices($clientId);
+                
+                if (empty($allServices['ClientServices'])) {
+                    return [
+                        'success' => false,
+                        'code' => 'no_active_services',
+                        'message' => 'You don\'t have any active packages or memberships. Please purchase a package to book appointments.',
+                        'redirect' => '/pricing'
+                    ];
+                } else {
+                    return [
+                        'success' => false,
+                        'code' => 'invalid_service_type',
+                        'message' => 'Your current package does not allow booking this type of appointment. Please purchase an appropriate package.',
+                        'redirect' => '/pricing'
+                    ];
+                }
+            }
+
+            // Check if any of the services are active and have remaining sessions
+            $validService = false;
+            foreach ($services['ClientServices'] as $service) {
+                // Check if service is active and has remaining sessions
+                if ($service['Remaining'] > 0 && strtotime($service['ExpirationDate']) > time()) {
+                    $this->debugLog("Found valid service", [
+                        'service_id' => $service['Id'],
+                        'remaining' => $service['Remaining'],
+                        'expiration' => $service['ExpirationDate']
+                    ]);
+                    $validService = true;
+                    break;
+                } else {
+                    $this->debugLog("Invalid service found", [
+                        'service_id' => $service['Id'],
+                        'remaining' => $service['Remaining'],
+                        'expiration' => $service['ExpirationDate']
+                    ]);
+                }
+            }
+
+            if (!$validService) {
+                $this->logger->error("No valid services with remaining sessions found", [
+                    'client_id' => $clientId
+                ]);
+                
+                return [
+                    'success' => false,
+                    'code' => 'no_remaining_sessions',
+                    'message' => 'You have no remaining sessions in your package. Please purchase additional sessions to book appointments.',
+                    'redirect' => '/pricing'
+                ];
+            }
+
+            // Prepare booking parameters (matching WordPress plugin format)
+            $bookingParams = [
+                'ApplyPayment' => false,
+                'ClientId' => $clientId,
+                'LocationId' => $appointmentData['locationId'],
+                'SessionTypeId' => $appointmentData['sessionTypeId'],
+                'StaffId' => $appointmentData['staffId'],
+                'StaffRequested' => true,
+                'StartDateTime' => $appointmentData['startDateTime'],
+                'Test' => false
+            ];
+
+            // Add notes if provided
+            if (!empty($appointmentData['notes'])) {
+                $bookingParams['Notes'] = $appointmentData['notes'];
+            }
+
+            $this->debugLog("Sending appointment booking request", [
+                'booking_params' => $bookingParams
+            ]);
+
             $response = $this->mindbodyApi->makeRequest(
                 '/appointment/addappointment',
-                array_merge($appointmentData, ['clientId' => $clientId]),
-                'POST'
+                $bookingParams,
+                'POST',
+                true // Use staff token
             );
 
             $this->debugLog("Appointment booking successful", [

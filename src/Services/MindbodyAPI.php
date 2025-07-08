@@ -676,4 +676,44 @@ class MindbodyAPI
             throw $e;
         }
     }
+
+    public function getClientServices(int $clientId, int $sessionTypeId = null, string $siteId = null): array
+    {
+        $siteId = $siteId ?: $this->getDefaultSiteId();
+        
+        $this->logger->info("Fetching client services", [
+            'client_id' => $clientId,
+            'session_type_id' => $sessionTypeId,
+            'site_id' => $siteId
+        ]);
+        
+        try {
+            $params = [
+                'ClientId' => $clientId,
+                'limit' => 100,
+                'offset' => 0
+            ];
+            
+            if ($sessionTypeId) {
+                $params['sessionTypeId'] = $sessionTypeId;
+            }
+            
+            $response = $this->makeRequest('/client/clientservices', $params, 'GET', true);
+            
+            $this->logger->info("Client services fetched successfully", [
+                'client_id' => $clientId,
+                'session_type_id' => $sessionTypeId,
+                'services_count' => count($response['ClientServices'] ?? [])
+            ]);
+            
+            return $response;
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching client services: " . $e->getMessage(), [
+                'client_id' => $clientId,
+                'session_type_id' => $sessionTypeId,
+                'site_id' => $siteId
+            ]);
+            throw $e;
+        }
+    }
 }
