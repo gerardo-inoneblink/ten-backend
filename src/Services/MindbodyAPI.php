@@ -405,7 +405,29 @@ class MindbodyAPI
 
     public function getServices(string $siteId = null): array
     {
-        return $this->makeRequest('/sale/services');
+        $siteId = $siteId ?: $this->getDefaultSiteId();
+        
+        $this->logger->info("Fetching services", ['site_id' => $siteId]);
+        
+        try {
+            $response = $this->makeRequest('/sale/services', [
+                'limit' => 200,
+                'offset' => 0,
+                'sellOnline' => true
+            ], 'GET', true);
+            
+            $this->logger->info("Services fetched successfully", [
+                'site_id' => $siteId,
+                'services_count' => count($response['Services'] ?? [])
+            ]);
+            
+            return $response;
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching services: " . $e->getMessage(), [
+                'site_id' => $siteId
+            ]);
+            throw $e;
+        }
     }
 
     public function getServiceById(int $serviceId, string $siteId = null): ?array
@@ -420,8 +442,7 @@ class MindbodyAPI
         try {
             $response = $this->makeRequest('/sale/services', [
                 'ServiceIds' => [$serviceId],
-                'LocationId' => $siteId,
-                'SoldOnline' => true
+                'sellOnline' => true
             ], 'GET', true);
             
             $service = $response['Services'][0] ?? null;

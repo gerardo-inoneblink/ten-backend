@@ -411,6 +411,15 @@ try {
         }
     });
 
+    $router->get('/api/services', function($request, $response) use ($mindbodyApi, $router) {
+        try {
+            $services = $mindbodyApi->getServices();
+            return $router->sendSuccess($services, 'Services retrieved successfully');
+        } catch (\Exception $e) {
+            return $router->sendError('Failed to get services: ' . $e->getMessage(), 500);
+        }
+    });
+
     $router->post('/api/purchase/details', function($request, $response) use ($mindbodyApi, $router) {
         $type = $request['body']['type'] ?? 'service';
         $id = $request['body']['id'] ?? 0;
