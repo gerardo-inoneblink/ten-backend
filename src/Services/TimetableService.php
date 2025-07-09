@@ -340,7 +340,6 @@ class TimetableService
 
         try {
             $sessionTypeId = $appointmentData['sessionTypeId'] ?? null;
-            // Check client services for this session type
             $this->debugLog("Checking client services for session type", [
                 'client_id' => $clientId,
                 'session_type_id' => $sessionTypeId
@@ -352,8 +351,7 @@ class TimetableService
                     'client_id' => $clientId,
                     'session_type_id' => $sessionTypeId
                 ]);
-                
-                // Check if client has any active services at all
+
                 $allServices = $this->mindbodyApi->getClientServices($clientId);
                 
                 if (empty($allServices['ClientServices'])) {
@@ -373,10 +371,8 @@ class TimetableService
                 }
             }
 
-            // Check if any of the services are active and have remaining sessions
             $validService = false;
             foreach ($services['ClientServices'] as $service) {
-                // Check if service is active and has remaining sessions
                 if ($service['Remaining'] > 0 && strtotime($service['ExpirationDate']) > time()) {
                     $this->debugLog("Found valid service", [
                         'service_id' => $service['Id'],
@@ -407,7 +403,6 @@ class TimetableService
                 ];
             }
 
-            // Prepare booking parameters (matching WordPress plugin format)
             $bookingParams = [
                 'ApplyPayment' => false,
                 'ClientId' => $clientId,
@@ -419,7 +414,6 @@ class TimetableService
                 'Test' => false
             ];
 
-            // Add notes if provided
             if (!empty($appointmentData['notes'])) {
                 $bookingParams['Notes'] = $appointmentData['notes'];
             }
@@ -432,7 +426,7 @@ class TimetableService
                 '/appointment/addappointment',
                 $bookingParams,
                 'POST',
-                true // Use staff token
+                true
             );
 
             $this->debugLog("Appointment booking successful", [

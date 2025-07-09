@@ -48,7 +48,9 @@ class AppConfig
             'SERVER_HOST' => 'localhost',
             'SERVER_PORT' => '8000',
             'LOG_LEVEL' => 'info',
-            'LOG_FILE' => 'logs/application.log'
+            'LOG_FILE' => 'logs/application.log',
+            'RESEND_API_KEY' => 're_SR9DqBBn_AKEdwxvDJ53gkYPKe97LtRPY',
+            'RESEND_FROM_EMAIL' => 'onboarding@resend.dev'
         ];
 
         foreach ($defaults as $key => $value) {

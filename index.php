@@ -270,7 +270,6 @@ try {
         if ($result['success']) {
             return $router->sendSuccess($result, 'Appointment booked successfully');
         } else {
-            // Handle specific error codes with appropriate HTTP status codes
             $statusCode = 400;
             $errorResponse = [
                 'error' => true,
@@ -278,11 +277,9 @@ try {
                 'status' => $statusCode
             ];
             
-            // Add error code and redirect if available
             if (isset($result['code'])) {
                 $errorResponse['code'] = $result['code'];
                 
-                // Use 403 for service-related errors
                 if (in_array($result['code'], ['no_active_services', 'invalid_service_type', 'no_remaining_sessions'])) {
                     $statusCode = 403;
                     $errorResponse['status'] = $statusCode;

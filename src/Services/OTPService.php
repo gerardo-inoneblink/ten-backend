@@ -11,6 +11,7 @@ class OTPService
     private Logger $logger;
     private AppConfig $config;
     private SessionService $sessionService;
+    private EmailService $emailService;
 
     private const OTP_EXPIRY_MINUTES = 10;
 
@@ -25,6 +26,7 @@ class OTPService
         $this->logger = $logger;
         $this->config = AppConfig::getInstance();
         $this->sessionService = $sessionService;
+        $this->emailService = new EmailService($logger);
     }
 
     private function generateOtp(): string
@@ -128,51 +130,7 @@ class OTPService
 
     private function sendOtpEmail(string $email, string $otp, array $client): bool
     {
-        $clientName = trim(($client['FirstName'] ?? '') . ' ' . ($client['LastName'] ?? ''));
-        $subject = 'FlexKit Verification Code';
-
-        $message = "Hi " . ($clientName ?: 'there') . ",\n\n";
-        $message .= "Your FlexKit verification code is: " . $otp . "\n\n";
-        $message .= "This code will expire in " . self::OTP_EXPIRY_MINUTES . " minutes.\n";
-        $message .= "Never share this code with anyone.\n\n";
-        $message .= "Powered by FlexKit.";
-
-        $headers = [
-            'From: FlexKit <noreply@flexkit.app>',
-            'Reply-To: noreply@flexkit.app',
-            'Content-Type: text/plain; charset=UTF-8',
-            'X-Mailer: FlexKit OTP Service'
-        ];
-
-        $environment = $this->config->get('APP_ENV', 'production');
-
-        if ($environment === 'development') {
-            $this->logger->logOtpOperation("DEVELOPMENT MODE: OTP would be sent", [
-                'email' => $email,
-                'otp_code' => $otp,
-                'subject' => $subject,
-                'message' => $message
-            ]);
-            return true;
-        }
-
-        $result = mail($email, $subject, $message, implode("\r\n", $headers));
-
-        if (!$result) {
-            $error = error_get_last();
-            $this->logger->error("Email sending failed", [
-                'email' => $email,
-                'error' => $error,
-                'mail_function_result' => $result
-            ]);
-        }
-
-        $this->logger->logOtpOperation("Email send attempt", [
-            'email' => $email,
-            'result' => $result ? 'success' : 'failed'
-        ]);
-
-        return $result;
+        return $this->emailService->sendOtpEmail($email, $otp, $client);
     }
 
     public function verifyOtp(string $otpCode): array
