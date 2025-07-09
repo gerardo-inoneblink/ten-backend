@@ -623,32 +623,61 @@ class MindbodyAPI
     public function getClientCompleteInfo(int $clientId, string $siteId, string $startDate = null, string $endDate = null): array
     {
         $params = [
-            'clientId' => $clientId
+            'ClientId' => $clientId
         ];
 
         if ($startDate) {
-            $params['startDate'] = $startDate;
+            $params['StartDate'] = $startDate;
         }
         if ($endDate) {
-            $params['endDate'] = $endDate;
+            $params['EndDate'] = $endDate;
         }
 
-        $clientResponse = $this->makeRequest('/client/clients', ['clientIds' => [$clientId]]);
-        $client = $clientResponse['Clients'][0] ?? null;
+        $this->logger->info("Fetching client complete info", [
+            'client_id' => $clientId,
+            'start_date' => $startDate,
+            'end_date' => $endDate
+        ]);
 
-        if (!$client) {
-            throw new \Exception('Client not found');
+        try {
+            $response = $this->makeRequest('/client/clientcompleteinfo', $params);
+            
+            $this->logger->info("Client complete info fetched successfully", [
+                'client_id' => $clientId,
+                'has_client' => isset($response['Client']),
+                'visits_count' => count($response['Visits'] ?? []),
+                'services_count' => count($response['Services'] ?? []),
+                'contracts_count' => count($response['Contracts'] ?? [])
+            ]);
+            
+            // Transform client data to match the snake_case format used in other endpoints
+            $clientData = $response['Client'] ?? null;
+            $transformedClient = null;
+            
+            if ($clientData) {
+                $transformedClient = [
+                    'id' => $clientData['Id'],
+                    'first_name' => $clientData['FirstName'],
+                    'last_name' => $clientData['LastName'],
+                    'email' => $clientData['Email']
+                ];
+            }
+            
+            // Return data in the format expected by API documentation
+            return [
+                'client' => $transformedClient,
+                'visits' => $response['Visits'] ?? [],
+                'services' => $response['Services'] ?? [],
+                'contracts' => $response['Contracts'] ?? []
+            ];
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching client complete info: " . $e->getMessage(), [
+                'client_id' => $clientId,
+                'start_date' => $startDate,
+                'end_date' => $endDate
+            ]);
+            throw $e;
         }
-
-        $scheduleResponse = $this->makeRequest('/client/clientschedule', $params);
-
-        $visitsResponse = $this->makeRequest('/client/clientvisits', $params);
-
-        return [
-            'client' => $client,
-            'schedule' => $scheduleResponse,
-            'visits' => $visitsResponse
-        ];
     }
 
     public function getPromotionCodes(string $siteId = null): array

@@ -606,7 +606,14 @@ try {
                 $startDate, 
                 $endDate
             );
-            return $router->sendSuccess($result, 'Client information retrieved successfully');
+            
+            // Return response format exactly as specified in API documentation
+            $response = [
+                'status' => 'success',
+                'data' => $result
+            ];
+            
+            return $router->sendJson($response);
         } catch (\Exception $e) {
             return $router->sendError('Failed to get client information: ' . $e->getMessage(), 500);
         }
