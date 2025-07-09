@@ -257,6 +257,11 @@ try {
             $programId = isset($request['query']['programId']) ? (int)$request['query']['programId'] : null;
             $locationId = isset($request['query']['locationId']) ? (int)$request['query']['locationId'] : null;
             
+            // Type-specific validation
+            if ($programType === 'appointments' && empty($sessionTypeId)) {
+                return $router->sendError('sessionTypeId is required for appointments', 400);
+            }
+            
             // Build filters for TimetableService
             $filters = [
                 'scheduleType' => $programType === 'classes' ? 'Class' : 'Appointment',

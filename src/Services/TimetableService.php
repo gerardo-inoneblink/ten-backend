@@ -238,9 +238,58 @@ class TimetableService
             $scheduleType = $filters['scheduleType'] ?? 'Class';
 
             if ($scheduleType === 'Class') {
-                $data = $this->getClassSchedule($filters);
+                $rawData = $this->getClassSchedule($filters);
             } else {
-                $data = $this->getAppointmentSchedule($filters);
+                $rawData = $this->getAppointmentSchedule($filters);
+            }
+            
+            // Transform the raw data to match the required format
+            $transformedClasses = [];
+            if (isset($rawData['Classes'])) {
+                foreach ($rawData['Classes'] as $class) {
+                    $transformedClasses[] = [
+                        'Id' => $class['Id'],
+                        'ClassId' => $class['ClassDescription']['Id'] ?? '',
+                        'ClassName' => $class['ClassDescription']['Name'] ?? '',
+                        'StartDateTime' => $class['StartDateTime'] ?? '',
+                        'EndDateTime' => $class['EndDateTime'] ?? '',
+                        'Staff' => [
+                            'Id' => $class['Staff']['Id'] ?? null,
+                            'Name' => $class['Staff']['Name'] ?? ($class['Staff']['FirstName'] ?? '') . ' ' . ($class['Staff']['LastName'] ?? '')
+                        ],
+                        'Location' => [
+                            'Id' => $class['Location']['Id'] ?? null,
+                            'Name' => $class['Location']['Name'] ?? ''
+                        ],
+                        'MaxCapacity' => $class['MaxCapacity'] ?? 0,
+                        'TotalBooked' => $class['TotalBooked'] ?? 0,
+                        'AvailableSpots' => max(0, ($class['MaxCapacity'] ?? 0) - ($class['TotalBooked'] ?? 0))
+                    ];
+                }
+            }
+            
+            // Handle appointments/time slots if applicable
+            if (isset($rawData['TimeSlots'])) {
+                foreach ($rawData['TimeSlots'] as $slot) {
+                    $transformedClasses[] = [
+                        'Id' => null,
+                        'ClassId' => null,
+                        'ClassName' => 'Available Time Slot',
+                        'StartDateTime' => $slot['start'],
+                        'EndDateTime' => $slot['end'],
+                        'Staff' => [
+                            'Id' => null,
+                            'Name' => ''
+                        ],
+                        'Location' => [
+                            'Id' => null,
+                            'Name' => ''
+                        ],
+                        'MaxCapacity' => 1,
+                        'TotalBooked' => 0,
+                        'AvailableSpots' => 1
+                    ];
+                }
             }
             
             // Add client visits if authenticated
@@ -268,8 +317,10 @@ class TimetableService
                 }
             }
             
-            $data['visits'] = $visits;
-            return $data;
+            return [
+                'classes' => $transformedClasses,
+                'visits' => $visits
+            ];
         } catch (\Exception $e) {
             $this->logger->error("Error getting timetable data: " . $e->getMessage());
             throw $e;
@@ -283,10 +334,17 @@ class TimetableService
         $mindbodyParams = [
             'startDateTime' => $params['startDate'] ?? date('c'),
             'endDateTime' => $params['endDate'] ?? date('c', strtotime('+30 days')),
-            'locationIds' => $params['locationIds'] ?? [],
-            'programIds' => $params['programIds'] ?? [],
-            'sessionTypeIds' => $params['sessionTypeIds'] ?? []
+            'limit' => 100,
+            'offset' => 0
         ];
+
+        if (!empty($params['programIds'])) {
+            $mindbodyParams['programIds'] = $params['programIds'];
+        }
+
+        if (!empty($params['locationIds'])) {
+            $mindbodyParams['locationIds'] = $params['locationIds'];
+        }
 
         $response = $this->mindbodyApi->getClassSchedule($mindbodyParams);
 
@@ -322,25 +380,73 @@ class TimetableService
         return $timeSlots;
     }
 
+    private function generateTimeSlotsFromAvailabilities(array $availabilities): array
+    {
+        $timeSlots = [];
+
+        foreach ($availabilities as $availability) {
+            if (isset($availability['StartDateTime']) && isset($availability['BookableEndDateTime'])) {
+                $start = new \DateTime($availability['StartDateTime']);
+                $end = new \DateTime($availability['BookableEndDateTime']);
+                $sessionLength = $availability['SessionType']['DefaultTimeLength'] ?? 60;
+
+                // Generate slots with 15-minute increments
+                $current = clone $start;
+                while ($current <= $end) {
+                    $slotEnd = clone $current;
+                    $slotEnd->add(new \DateInterval('PT' . $sessionLength . 'M'));
+
+                    if ($slotEnd <= $end) {
+                        $timeSlots[] = [
+                            'start' => $current->format('c'),
+                            'end' => $slotEnd->format('c'),
+                            'available' => true,
+                            'staffId' => $availability['Staff']['Id'] ?? null,
+                            'staffName' => $availability['Staff']['Name'] ?? '',
+                            'locationId' => $availability['Location']['Id'] ?? null,
+                            'locationName' => $availability['Location']['Name'] ?? '',
+                            'sessionTypeId' => $availability['SessionType']['Id'] ?? null,
+                            'sessionTypeName' => $availability['SessionType']['Name'] ?? ''
+                        ];
+                    }
+
+                    $current->add(new \DateInterval('PT15M'));
+                }
+            }
+        }
+
+        return $timeSlots;
+    }
+
     private function getAppointmentSchedule(array $params): array
     {
         $this->debugLog("Fetching appointment schedule");
 
+        // Format dates as Y-m-d for appointment endpoints
+        $startDate = date('Y-m-d', strtotime($params['startDate'] ?? date('c')));
+        $endDate = date('Y-m-d', strtotime($params['endDate'] ?? date('c', strtotime('+30 days'))));
+
         $mindbodyParams = [
-            'startDateTime' => $params['startDate'] ?? date('c'),
-            'endDateTime' => $params['endDate'] ?? date('c', strtotime('+30 days')),
-            'locationIds' => $params['locationIds'] ?? [],
-            'staffIds' => $params['staffIds'] ?? [],
-            'sessionTypeIds' => $params['sessionTypeIds'] ?? []
+            'sessionTypeIds' => $params['sessionTypeIds'] ?? [],
+            'startDate' => $startDate,
+            'endDate' => $endDate,
+            'limit' => 100,
+            'offset' => 0
         ];
 
+        if (!empty($params['locationIds'])) {
+            $mindbodyParams['locationIds'] = $params['locationIds'];
+        }
+
         $response = $this->mindbodyApi->makeRequest(
-            '/appointment/appointmenttimes',
-            $mindbodyParams
+            '/appointment/bookableitems',
+            $mindbodyParams,
+            'GET',
+            true // Use staff token as per documentation
         );
 
-        if (isset($response['AppointmentTimes'])) {
-            $timeSlots = $this->generateTimeSlots($response['AppointmentTimes']);
+        if (isset($response['Availabilities'])) {
+            $timeSlots = $this->generateTimeSlotsFromAvailabilities($response['Availabilities']);
             $response['TimeSlots'] = $timeSlots;
         }
 
