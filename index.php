@@ -384,7 +384,7 @@ try {
         if ($result['success']) {
             $responseData = [
                 'late_cancel' => $lateCancel,
-                'result' => $result['data'] ?? []
+                'result' => (object)[]
             ];
             return $router->sendSuccess($responseData, 'Class cancelled successfully');
         } else {
