@@ -723,7 +723,9 @@ try {
                 
                 return $router->sendSuccess($contract, 'Contract details retrieved successfully');
             } else {
-                $service = $mindbodyApi->getServiceById((int)$id);
+                // For services, get the locationId from request or use default
+                $locationId = isset($request['body']['location_id']) ? (int)$request['body']['location_id'] : null;
+                $service = $mindbodyApi->getServiceDetails((int)$id, $locationId);
                 
                 if (!$service) {
                     return $router->sendError('Service not found', 404);

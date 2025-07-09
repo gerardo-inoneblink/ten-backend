@@ -466,6 +466,69 @@ class MindbodyAPI
         }
     }
 
+    public function getServiceDetails(int $serviceId, int $locationId = null): ?array
+    {
+        $siteId = $this->getDefaultSiteId();
+        $locationId = $locationId ?: 1; // Default location ID
+        
+        $this->logger->info("Fetching service details for purchase", [
+            'service_id' => $serviceId,
+            'location_id' => $locationId,
+            'site_id' => $siteId
+        ]);
+        
+        try {
+            // Call the endpoint as specified in API documentation
+            $response = $this->makeRequest('/sale/services', [
+                'limit' => 200,
+                'offset' => 0,
+                'locationId' => $site_id,
+                'sellOnline' => true
+            ], 'GET', true);
+            // Find the specific service by ID
+            $service = null;
+            if (isset($response['Services'])) {
+                foreach ($response['Services'] as $serviceData) {
+                    if ($serviceData['Id'] == $serviceId) {
+                        $service = $serviceData;
+                        break;
+                    }
+                }
+            }
+            
+            if (!$service) {
+                $this->logger->warning("Service not found", ['service_id' => $serviceId]);
+                return null;
+            }
+            
+            // Transform response to match API documentation format
+            $transformedService = [
+                'name' => $service['Name'] ?? '',
+                'price' => (float) ($service['Price'] ?? 0),
+                'tax_rate' => (float) ($service['TaxRate'] ?? 0.08), // Default tax rate
+                'id' => $service['Id'],
+                'is_intro_offer' => $service['IsIntroOffer'] ?? false,
+                'intro_offer_type' => $service['IntroOfferType'] ?? null
+            ];
+            
+            $this->logger->info("Service details transformed successfully", [
+                'service_id' => $serviceId,
+                'service_name' => $transformedService['name'],
+                'price' => $transformedService['price']
+            ]);
+            
+            return $transformedService;
+            
+        } catch (\Exception $e) {
+            $this->logger->error("Error fetching service details: " . $e->getMessage(), [
+                'service_id' => $serviceId,
+                'location_id' => $locationId,
+                'site_id' => $siteId
+            ]);
+            throw $e;
+        }
+    }
+
     public function getContracts(string $siteId = null, int $locationId = null): array
     {
         $siteId = $siteId ?: $this->getDefaultSiteId();
