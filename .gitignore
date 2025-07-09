@@ -1,4 +1,4 @@
 /vendor
-/public/logs
+/logs
 .env
 composer.lock
