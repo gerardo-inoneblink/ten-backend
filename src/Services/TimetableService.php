@@ -462,6 +462,56 @@ class TimetableService
         ]);
 
         try {
+            // Step 1: Check client services for remaining sessions (as per API documentation)
+            $this->debugLog("Checking client services for classes program", [
+                'client_id' => $clientId,
+                'program_id' => 22 // Classes program ID
+            ]);
+            
+            $services = $this->mindbodyApi->makeRequest('/client/clientservices', [
+                'ClientId' => $clientId,
+                'programIds' => [22], // Classes program ID
+                'showActiveOnly' => true
+            ]);
+            
+            if (empty($services['ClientServices'])) {
+                $this->logger->error("No valid services found for client", [
+                    'client_id' => $clientId,
+                    'program_id' => 22
+                ]);
+
+                return [
+                    'success' => false,
+                    'message' => 'You don\'t have any active packages or memberships for classes. Please purchase a package to book classes.'
+                ];
+            }
+
+            // Check if any service has remaining sessions
+            $validService = false;
+            foreach ($services['ClientServices'] as $service) {
+                if ($service['Remaining'] > 0 && strtotime($service['ExpirationDate']) > time()) {
+                    $this->debugLog("Found valid service for classes", [
+                        'service_id' => $service['Id'],
+                        'remaining' => $service['Remaining'],
+                        'expiration' => $service['ExpirationDate']
+                    ]);
+                    $validService = true;
+                    break;
+                }
+            }
+
+            if (!$validService) {
+                $this->logger->error("No valid services with remaining sessions found", [
+                    'client_id' => $clientId
+                ]);
+                
+                return [
+                    'success' => false,
+                    'message' => 'You have no remaining sessions in your package. Please purchase additional sessions to book classes.'
+                ];
+            }
+
+            // Step 2: Book the class
             $response = $this->mindbodyApi->addClientToClass($clientId, $classId);
 
             $this->debugLog("Class booking successful", [
@@ -469,10 +519,19 @@ class TimetableService
                 'class_id' => $classId
             ]);
 
+            // Format response according to API documentation
+            $formattedClasses = [
+                'Id' => $response['Visit']['Id'] ?? null,
+                'ClassId' => $response['Visit']['ClassId'] ?? null,
+                'ClassName' => $response['Visit']['ClassName'] ?? ''
+            ];
+
             return [
                 'success' => true,
                 'message' => 'Class booked successfully',
-                'booking_data' => $response
+                'booking_data' => [
+                    'Classes' => $formattedClasses
+                ]
             ];
 
         } catch (\Exception $e) {

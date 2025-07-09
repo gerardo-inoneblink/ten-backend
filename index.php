@@ -333,7 +333,8 @@ try {
         if ($result['success']) {
             return $router->sendSuccess($result['booking_data'] ?? [], 'Class booked successfully');
         } else {
-            if (strpos($result['message'], 'remaining sessions') !== false) {
+            if (strpos($result['message'], 'remaining sessions') !== false || 
+                strpos($result['message'], 'active packages') !== false) {
                 return $router->sendError($result['message'], 403);
             }
             return $router->sendError($result['message'], 500);
