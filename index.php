@@ -533,15 +533,45 @@ try {
     });
 
     $router->post('/api/client/register', function($request, $response) use ($mindbodyApi, $router) {
-        $clientData = $request['body'] ?? [];
+        $data = $request['body'] ?? [];
         
-        if (empty($clientData['email'])) {
+        // Validate required fields
+        if (empty($data['email'])) {
             return $router->sendError('Email is required', 400);
+        }
+        if (empty($data['firstName'])) {
+            return $router->sendError('First name is required', 400);
+        }
+        if (empty($data['lastName'])) {
+            return $router->sendError('Last name is required', 400);
+        }
+        if (empty($data['phone'])) {
+            return $router->sendError('Phone number is required', 400);
+        }
+        if (empty($data['dateOfBirth'])) {
+            return $router->sendError('Date of birth is required', 400);
+        }
+        if (empty($data['gender'])) {
+            return $router->sendError('Gender is required', 400);
+        }
+        if (!isset($data['termsAccepted']) || !$data['termsAccepted']) {
+            return $router->sendError('Terms and conditions must be accepted', 400);
         }
 
         try {
-            $result = $mindbodyApi->createClient($clientData);
-            return $router->sendSuccess($result, 'Client registered successfully');
+            $result = $mindbodyApi->createClient($data);
+            
+            // Transform response to match API documentation
+            $responseData = [
+                'client' => [
+                    'id' => $result['Client']['Id'],
+                    'email' => $result['Client']['Email'],
+                    'first_name' => $result['Client']['FirstName'],
+                    'last_name' => $result['Client']['LastName']
+                ]
+            ];
+            
+            return $router->sendSuccess($responseData, 'Account created successfully! Please log in to continue.');
         } catch (\Exception $e) {
             return $router->sendError('Failed to register client: ' . $e->getMessage(), 500);
         }
