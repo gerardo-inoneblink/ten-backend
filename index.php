@@ -52,7 +52,7 @@ try {
 
     $router->get('/', function($request, $response) use ($config, $database) {
         return [
-            'success' => true,
+            'status' => 'success',
             'message' => 'FlexKit Ten API is running',
             'version' => '1.0.0',
             'environment' => $config->get('APP_ENV'),
@@ -69,14 +69,17 @@ try {
         }
 
         return [
-            'success' => true,
-            'status' => 'operational',
-            'services' => [
-                'database' => true,
-                'mindbody_api' => $mindbodyStatus,
-                'session' => session_status() === PHP_SESSION_ACTIVE
-            ],
-            'timestamp' => date('c')
+            'status' => 'success',
+            'message' => 'API status check completed',
+            'data' => [
+                'status' => 'operational',
+                'services' => [
+                    'database' => true,
+                    'mindbody_api' => $mindbodyStatus,
+                    'session' => session_status() === PHP_SESSION_ACTIVE
+                ],
+                'timestamp' => date('c')
+            ]
         ];
     });
 
@@ -96,10 +99,19 @@ try {
             $result = $otpService->sendEmailOtp($email);
             
             if ($result['success']) {
-                return $router->sendSuccess($result, 'OTP sent successfully');
+                // Format response according to API_ENDPOINTS.md
+                $responseData = [
+                    'email' => $email,
+                    'expires_in' => 300
+                ];
+                return $router->sendSuccess($responseData, 'Verification code sent successfully.', 'otp_sent');
             } else {
                 $logger->error("OTP service returned error", ['result' => $result]);
-                return $router->sendError($result['message'], 400);
+                // Check if client not found
+                if (strpos($result['message'], 'not found') !== false) {
+                    return $router->sendError($result['message'], 404);
+                }
+                return $router->sendError($result['message'], 500);
             }
         } catch (\Exception $e) {
             $logger->error("Exception in email OTP route", [
@@ -109,12 +121,21 @@ try {
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
             ]);
-            return $router->sendError('Internal server error: ' . $e->getMessage(), 500);
+            return $router->sendError('API configuration error', 500, null, [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
         }
     });
 
-    $router->post('/api/auth/verify', function($request, $response) use ($otpService, $router) {
+    $router->post('/api/auth/verify', function($request, $response) use ($otpService, $router, $mindbodyApi, $sessionService) {
+        $email = $request['body']['email'] ?? '';
         $otpCode = $request['body']['otp'] ?? '';
+        
+        if (empty($email)) {
+            return $router->sendError('Email is required', 400);
+        }
         
         if (empty($otpCode)) {
             return $router->sendError('OTP code is required', 400);
@@ -123,15 +144,59 @@ try {
         $result = $otpService->verifyOtp($otpCode);
         
         if ($result['success']) {
-            return $router->sendSuccess($result, 'Authentication successful');
+            try {
+                // Get client details from session
+                $client = $sessionService->get('authenticated_client');
+                
+                if (!$client) {
+                    return $router->sendError('Client not found', 404);
+                }
+                
+                // Get client schedule
+                $schedule = [];
+                try {
+                    $scheduleResult = $mindbodyApi->makeRequest('/client/clientschedule', [
+                        'ClientId' => $client['Id']
+                    ]);
+                    $schedule = $scheduleResult['Visits'] ?? [];
+                } catch (\Exception $e) {
+                    // Schedule fetch failed, but continue with empty schedule
+                }
+                
+                // Generate session token
+                $sessionToken = bin2hex(random_bytes(32));
+                $sessionService->set('session_token', $sessionToken);
+                $sessionService->set('token_expires_at', time() + (24 * 60 * 60)); // 24 hours
+                
+                $responseData = [
+                    'client' => [
+                        'id' => $client['Id'],
+                        'first_name' => $client['FirstName'] ?? '',
+                        'last_name' => $client['LastName'] ?? '',
+                        'email' => $client['Email'] ?? ''
+                    ],
+                    'schedule' => $schedule,
+                    'session' => [
+                        'id' => $sessionToken,
+                        'expires_at' => date('c', time() + (24 * 60 * 60)),
+                        'last_activity' => date('c')
+                    ]
+                ];
+                
+                return $router->sendSuccess($responseData, 'Verification successful.', 'verification_successful');
+            } catch (\Exception $e) {
+                return $router->sendError('System error', 500, null, [
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]);
+            }
         } else {
-            return $router->sendError($result['message'], 401);
+            if (strpos($result['message'], 'not found') !== false) {
+                return $router->sendError($result['message'], 404);
+            }
+            return $router->sendError($result['message'], 400, 'invalid_otp');
         }
-    });
-
-    $router->post('/api/auth/logout', function($request, $response) use ($otpService, $router) {
-        $otpService->logout();
-        return $router->sendSuccess(null, 'Logged out successfully');
     });
 
     $router->get('/api/auth/status', function($request, $response) use ($otpService, $sessionService) {
@@ -139,14 +204,18 @@ try {
         $client = $sessionService->get('authenticated_client');
         
         return [
-            'authenticated' => $isAuthenticated,
-            'client' => $isAuthenticated ? [
-                'id' => $client['Id'] ?? null,
-                'first_name' => $client['FirstName'] ?? '',
-                'last_name' => $client['LastName'] ?? '',
-                'email' => $client['Email'] ?? ''
-            ] : null,
-            'session_id' => $sessionService->getSessionId()
+            'status' => 'success',
+            'message' => 'Authentication status retrieved',
+            'data' => [
+                'authenticated' => $isAuthenticated,
+                'client' => $isAuthenticated ? [
+                    'id' => $client['Id'] ?? null,
+                    'first_name' => $client['FirstName'] ?? '',
+                    'last_name' => $client['LastName'] ?? '',
+                    'email' => $client['Email'] ?? ''
+                ] : null,
+                'session_id' => $sessionService->getSessionId()
+            ]
         ];
     });
 
@@ -160,73 +229,182 @@ try {
         }
     });
 
-    $router->get('/api/timetable/data', function($request, $response) use ($timetableService, $router) {
+    $router->get('/api/timetable/data', function($request, $response) use ($timetableService, $router, $sessionService) {
         try {
+            // Required parameters
+            $programType = $request['query']['programType'] ?? '';
+            $startDateTime = $request['query']['startDateTime'] ?? '';
+            $endDateTime = $request['query']['endDateTime'] ?? '';
+            
+            if (empty($programType)) {
+                return $router->sendError('programType is required', 400);
+            }
+            
+            if (!in_array($programType, ['classes', 'appointments'])) {
+                return $router->sendError('programType must be either "classes" or "appointments"', 400);
+            }
+            
+            if (empty($startDateTime)) {
+                return $router->sendError('startDateTime is required', 400);
+            }
+            
+            if (empty($endDateTime)) {
+                return $router->sendError('endDateTime is required', 400);
+            }
+            
+            // Optional parameters
+            $sessionTypeId = isset($request['query']['sessionTypeId']) ? (int)$request['query']['sessionTypeId'] : null;
+            $programId = isset($request['query']['programId']) ? (int)$request['query']['programId'] : null;
+            $locationId = isset($request['query']['locationId']) ? (int)$request['query']['locationId'] : null;
+            
+            // Build filters for TimetableService
             $filters = [
-                'scheduleType' => $request['query']['schedule_type'] ?? 'Class',
-                'startDate' => $request['query']['start_date'] ?? date('c'),
-                'endDate' => $request['query']['end_date'] ?? date('c', strtotime('+30 days')),
-                'locationIds' => isset($request['query']['location_ids']) ? explode(',', $request['query']['location_ids']) : [],
-                'programIds' => isset($request['query']['program_ids']) ? explode(',', $request['query']['program_ids']) : [],
-                'sessionTypeIds' => isset($request['query']['session_type_ids']) ? explode(',', $request['query']['session_type_ids']) : []
+                'scheduleType' => $programType === 'classes' ? 'Class' : 'Appointment',
+                'startDate' => $startDateTime,
+                'endDate' => $endDateTime
             ];
-
-            $data = $timetableService->getTimetableData($filters);
+            
+            if ($locationId) {
+                $filters['locationIds'] = [$locationId];
+            }
+            
+            if ($programType === 'classes' && $programId) {
+                $filters['programIds'] = [$programId];
+            } elseif ($programType === 'appointments' && $sessionTypeId) {
+                $filters['sessionTypeIds'] = [$sessionTypeId];
+            }
+            
+            // Get authenticated client for visits (optional)
+            $clientId = null;
+            $authHeader = $request['headers']['authorization'] ?? '';
+            if (strpos($authHeader, 'Bearer ') === 0) {
+                $token = substr($authHeader, 7);
+                $storedToken = $sessionService->get('session_token');
+                $tokenExpiry = $sessionService->get('token_expires_at');
+                
+                if ($token === $storedToken && $tokenExpiry > time()) {
+                    $client = $sessionService->get('authenticated_client');
+                    if ($client) {
+                        $clientId = $client['Id'];
+                    }
+                }
+            }
+            
+            $data = $timetableService->getTimetableData($filters, $clientId);
             return $router->sendSuccess($data, 'Timetable data retrieved successfully');
         } catch (\Exception $e) {
             return $router->sendError('Failed to get timetable data: ' . $e->getMessage(), 500);
         }
     });
 
-    $router->post('/api/class/book', function($request, $response) use ($timetableService, $otpService, $sessionService, $router) {
-        if (!$otpService->isAuthenticated()) {
+    $router->post('/api/class/book', function($request, $response) use ($timetableService, $sessionService, $router) {
+        // Check Bearer token authentication
+        $authHeader = $request['headers']['authorization'] ?? '';
+        if (strpos($authHeader, 'Bearer ') !== 0) {
             return $router->sendError('Authentication required', 401);
         }
-
-        $client = $sessionService->get('authenticated_client');
-        $classId = $request['body']['classId'] ?? 0;
-        $sendEmail = $request['body']['send_email'] ?? true;
-
-        if (empty($classId)) {
-            return $router->sendError('Class ID is required', 400);
-        }
-
-        $result = $timetableService->bookClass($client['Id'], $classId, $sendEmail);
         
-        if ($result['success']) {
-            return $router->sendSuccess($result, 'Class booked successfully');
-        } else {
-            return $router->sendError($result['message'], 400);
+        $token = substr($authHeader, 7);
+        $storedToken = $sessionService->get('session_token');
+        $tokenExpiry = $sessionService->get('token_expires_at');
+        
+        if ($token !== $storedToken || $tokenExpiry <= time()) {
+            return $router->sendError('Authentication required', 401);
         }
-    });
-
-    $router->post('/api/class/cancel', function($request, $response) use ($timetableService, $otpService, $sessionService, $router) {
-        if (!$otpService->isAuthenticated()) {
+        
+        $client = $sessionService->get('authenticated_client');
+        if (!$client) {
             return $router->sendError('Authentication required', 401);
         }
 
-        $client = $sessionService->get('authenticated_client');
         $classId = $request['body']['classId'] ?? 0;
 
         if (empty($classId)) {
             return $router->sendError('Class ID is required', 400);
         }
 
-        $result = $timetableService->cancelClass($client['Id'], $classId);
+        $result = $timetableService->bookClass($client['Id'], $classId);
         
         if ($result['success']) {
-            return $router->sendSuccess($result, 'Class cancelled successfully');
+            return $router->sendSuccess($result['booking_data'] ?? [], 'Class booked successfully');
         } else {
-            return $router->sendError($result['message'], 400);
+            if (strpos($result['message'], 'remaining sessions') !== false) {
+                return $router->sendError($result['message'], 403);
+            }
+            return $router->sendError($result['message'], 500);
         }
     });
 
-    $router->post('/api/appointment/book', function($request, $response) use ($timetableService, $otpService, $sessionService, $router) {
-        if (!$otpService->isAuthenticated()) {
+    $router->post('/api/class/cancel', function($request, $response) use ($timetableService, $sessionService, $router) {
+        // Check Bearer token authentication
+        $authHeader = $request['headers']['authorization'] ?? '';
+        if (strpos($authHeader, 'Bearer ') !== 0) {
             return $router->sendError('Authentication required', 401);
         }
-
+        
+        $token = substr($authHeader, 7);
+        $storedToken = $sessionService->get('session_token');
+        $tokenExpiry = $sessionService->get('token_expires_at');
+        
+        if ($token !== $storedToken || $tokenExpiry <= time()) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
         $client = $sessionService->get('authenticated_client');
+        if (!$client) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
+        $classId = $request['body']['classId'] ?? 0;
+        $startDateTime = $request['body']['startDateTime'] ?? '';
+
+        if (empty($classId)) {
+            return $router->sendError('Class ID is required', 400);
+        }
+        
+        if (empty($startDateTime)) {
+            return $router->sendError('startDateTime is required', 400);
+        }
+
+        // Check if cancellation is late (within 12 hours)
+        $lateCancel = false;
+        $classTime = strtotime($startDateTime);
+        if ($classTime && $classTime - time() < 12 * 60 * 60) {
+            $lateCancel = true;
+        }
+
+        $result = $timetableService->cancelClass($client['Id'], $classId, $lateCancel);
+        
+        if ($result['success']) {
+            $responseData = [
+                'late_cancel' => $lateCancel,
+                'result' => $result['data'] ?? []
+            ];
+            return $router->sendSuccess($responseData, 'Class cancelled successfully');
+        } else {
+            return $router->sendError($result['message'], 500);
+        }
+    });
+
+    $router->post('/api/appointment/book', function($request, $response) use ($timetableService, $sessionService, $router) {
+        // Check Bearer token authentication
+        $authHeader = $request['headers']['authorization'] ?? '';
+        if (strpos($authHeader, 'Bearer ') !== 0) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
+        $token = substr($authHeader, 7);
+        $storedToken = $sessionService->get('session_token');
+        $tokenExpiry = $sessionService->get('token_expires_at');
+        
+        if ($token !== $storedToken || $tokenExpiry <= time()) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
+        $client = $sessionService->get('authenticated_client');
+        if (!$client) {
+            return $router->sendError('Authentication required', 401);
+        }
         
         $startDateTime = $request['body']['startDateTime'] ?? '';
         $staffId = $request['body']['staffId'] ?? 0;
@@ -268,13 +446,16 @@ try {
         $result = $timetableService->bookAppointment($client['Id'], $appointmentData);
         
         if ($result['success']) {
-            return $router->sendSuccess($result, 'Appointment booked successfully');
+            $responseData = [
+                'AppointmentId' => $result['appointmentId'] ?? null,
+                'StartDateTime' => $startDateTime
+            ];
+            return $router->sendSuccess($responseData, 'Appointment booked successfully');
         } else {
             $statusCode = 400;
             $errorResponse = [
-                'error' => true,
-                'message' => $result['message'],
-                'status' => $statusCode
+                'status' => 'error',
+                'message' => $result['message']
             ];
             
             if (isset($result['code'])) {
@@ -282,7 +463,6 @@ try {
                 
                 if (in_array($result['code'], ['no_active_services', 'invalid_service_type', 'no_remaining_sessions'])) {
                     $statusCode = 403;
-                    $errorResponse['status'] = $statusCode;
                 }
             }
             
@@ -294,8 +474,23 @@ try {
         }
     });
 
-    $router->post('/api/appointment/cancel', function($request, $response) use ($timetableService, $otpService, $router) {
-        if (!$otpService->isAuthenticated()) {
+    $router->post('/api/appointment/cancel', function($request, $response) use ($timetableService, $sessionService, $router) {
+        // Check Bearer token authentication
+        $authHeader = $request['headers']['authorization'] ?? '';
+        if (strpos($authHeader, 'Bearer ') !== 0) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
+        $token = substr($authHeader, 7);
+        $storedToken = $sessionService->get('session_token');
+        $tokenExpiry = $sessionService->get('token_expires_at');
+        
+        if ($token !== $storedToken || $tokenExpiry <= time()) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
+        $client = $sessionService->get('authenticated_client');
+        if (!$client) {
             return $router->sendError('Authentication required', 401);
         }
 
@@ -325,9 +520,9 @@ try {
         $result = $timetableService->cancelAppointment($appointmentId, $sendEmail, $lateCancel);
         
         if ($result['success']) {
-            return $router->sendSuccess($result, 'Appointment cancelled successfully');
+            return $router->sendSuccess([], 'Appointment cancelled successfully');
         } else {
-            return $router->sendError($result['message'], 400);
+            return $router->sendError($result['message'], 500);
         }
     });
 
@@ -346,12 +541,25 @@ try {
         }
     });
 
-    $router->get('/api/client/complete-info', function($request, $response) use ($mindbodyApi, $otpService, $sessionService, $router) {
-        if (!$otpService->isAuthenticated()) {
+    $router->get('/api/client/complete-info', function($request, $response) use ($mindbodyApi, $sessionService, $router) {
+        // Check Bearer token authentication
+        $authHeader = $request['headers']['authorization'] ?? '';
+        if (strpos($authHeader, 'Bearer ') !== 0) {
             return $router->sendError('Authentication required', 401);
         }
-
+        
+        $token = substr($authHeader, 7);
+        $storedToken = $sessionService->get('session_token');
+        $tokenExpiry = $sessionService->get('token_expires_at');
+        
+        if ($token !== $storedToken || $tokenExpiry <= time()) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
         $client = $sessionService->get('authenticated_client');
+        if (!$client) {
+            return $router->sendError('Authentication required', 401);
+        }
         $startDate = $request['query']['start_date'] ?? null;
         $endDate = $request['query']['end_date'] ?? null;
 
@@ -437,6 +645,19 @@ try {
             return $router->sendSuccess($services, 'Services retrieved successfully');
         } catch (\Exception $e) {
             return $router->sendError('Failed to get services: ' . $e->getMessage(), 500);
+        }
+    });
+
+    $router->get('/api/test', function($request, $response) use ($mindbodyApi, $router) {
+        try {
+            // Simple API call to test connection
+            $test = $mindbodyApi->makeRequest('/site/locations', [
+                'limit' => 1
+            ]);
+            
+            return $router->sendSuccess($test, 'API connection test completed');
+        } catch (\Exception $e) {
+            return $router->sendError('API connection test failed: ' . $e->getMessage(), 500);
         }
     });
 

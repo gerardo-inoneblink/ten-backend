@@ -147,10 +147,72 @@ class TimetableService
     public function getFilterOptions(bool $onlineOnly = true): array
     {
         try {
-            $locations = $this->getLocations();
-            $classPrograms = $this->getPrograms('Class');
-            $appointmentPrograms = $this->getPrograms('Appointment');
-            $sessionTypes = $this->getSessionTypes($onlineOnly);
+            // Get locations using /site/locations
+            $locationsResponse = $this->mindbodyApi->makeRequest('/site/locations', [
+                'limit' => 100,
+                'offset' => 0
+            ]);
+            
+            $locations = [];
+            if (isset($locationsResponse['Locations'])) {
+                foreach ($locationsResponse['Locations'] as $location) {
+                    // Skip excluded locations and locations without classes
+                    if (in_array($location['Id'], [7, 10], true) || !$location['HasClasses']) {
+                        continue;
+                    }
+                    
+                    $locations[] = [
+                        'id' => $location['Id'],
+                        'name' => $location['Name'],
+                        'siteId' => $location['SiteID']
+                    ];
+                }
+            }
+            
+            // Get programs using /sale/programs
+            $programsResponse = $this->mindbodyApi->makeRequest('/site/programs', [
+                'limit' => 100,
+                'offset' => 0
+            ]);
+            
+            $classPrograms = [];
+            $appointmentPrograms = [];
+            
+            if (isset($programsResponse['Programs'])) {
+                foreach ($programsResponse['Programs'] as $program) {
+                    // Classes program
+                    if ($program['ScheduleType'] === 'Class') {
+                        $classPrograms[] = [
+                            'id' => $program['Id'],
+                            'name' => $program['Name']
+                        ];
+                    }
+                    // Appointments program
+                    if ($program['ScheduleType'] === 'Appointment') {
+                        $appointmentPrograms[] = [
+                            'id' => $program['Id'],
+                            'name' => $program['Name']
+                        ];
+                    }
+                }
+            }
+            
+            // Get session types using /sale/sessiontypes
+            $sessionTypesResponse = $this->mindbodyApi->makeRequest('/site/sessiontypes', [
+                'limit' => 100,
+                'offset' => 0
+            ]);
+            
+            $sessionTypes = [];
+            if (isset($sessionTypesResponse['SessionTypes'])) {
+                foreach ($sessionTypesResponse['SessionTypes'] as $sessionType) {
+                    $sessionTypes[] = [
+                        'id' => $sessionType['Id'],
+                        'name' => $sessionType['Name'],
+                        'defaultTimeLength' => $sessionType['DefaultTimeLength'] ?? 60
+                    ];
+                }
+            }
 
             return [
                 'locations' => $locations,
@@ -161,23 +223,53 @@ class TimetableService
                 'sessionTypes' => $sessionTypes
             ];
         } catch (\Exception $e) {
+            var_dump($e);
+            die();
             $this->logger->error("Error getting filter options: " . $e->getMessage());
             throw $e;
         }
     }
 
-    public function getTimetableData(array $filters): array
+    public function getTimetableData(array $filters, int $clientId = null): array
     {
-        $this->debugLog("Getting timetable data", ['filters' => $filters]);
+        $this->debugLog("Getting timetable data", ['filters' => $filters, 'clientId' => $clientId]);
 
         try {
             $scheduleType = $filters['scheduleType'] ?? 'Class';
 
             if ($scheduleType === 'Class') {
-                return $this->getClassSchedule($filters);
+                $data = $this->getClassSchedule($filters);
             } else {
-                return $this->getAppointmentSchedule($filters);
+                $data = $this->getAppointmentSchedule($filters);
             }
+            
+            // Add client visits if authenticated
+            $visits = [];
+            if ($clientId) {
+                try {
+                    $visitsResponse = $this->mindbodyApi->makeRequest('/client/clientvisits', [
+                        'ClientId' => $clientId,
+                        'StartDate' => $filters['startDate'],
+                        'Limit' => 200
+                    ]);
+                    
+                    if (isset($visitsResponse['Visits'])) {
+                        foreach ($visitsResponse['Visits'] as $visit) {
+                            $visits[] = [
+                                'id' => $visit['Id'],
+                                'classId' => $visit['ClassId'] ?? null,
+                                'startDateTime' => $visit['StartDateTime'] ?? null,
+                                'locationId' => $visit['LocationId'] ?? null
+                            ];
+                        }
+                    }
+                } catch (\Exception $e) {
+                    $this->debugLog("Failed to get client visits", ['error' => $e->getMessage()]);
+                }
+            }
+            
+            $data['visits'] = $visits;
+            return $data;
         } catch (\Exception $e) {
             $this->logger->error("Error getting timetable data: " . $e->getMessage());
             throw $e;
@@ -290,32 +382,36 @@ class TimetableService
         }
     }
 
-    public function cancelClass(int $clientId, int $classId): array
+    public function cancelClass(int $clientId, int $classId, bool $lateCancel = false): array
     {
         $this->debugLog("Cancelling class", [
             'client_id' => $clientId,
-            'class_id' => $classId
+            'class_id' => $classId,
+            'late_cancel' => $lateCancel
         ]);
 
         try {
             $response = $this->mindbodyApi->makeRequest(
                 '/class/removeclientfromclass',
                 [
-                    'clientId' => $clientId,
-                    'classId' => $classId
+                    'ClientId' => $clientId,
+                    'ClassId' => $classId,
+                    'LateCancel' => $lateCancel,
+                    'SendEmail' => true
                 ],
                 'POST'
             );
 
             $this->debugLog("Class cancellation successful", [
                 'client_id' => $clientId,
-                'class_id' => $classId
+                'class_id' => $classId,
+                'late_cancel' => $lateCancel
             ]);
 
             return [
                 'success' => true,
                 'message' => 'Class cancelled successfully',
-                'cancellation_data' => $response
+                'data' => $response
             ];
 
         } catch (\Exception $e) {
@@ -430,12 +526,14 @@ class TimetableService
             );
 
             $this->debugLog("Appointment booking successful", [
-                'client_id' => $clientId
+                'client_id' => $clientId,
+                'appointment_id' => $response['Appointment']['Id'] ?? null
             ]);
 
             return [
                 'success' => true,
                 'message' => 'Appointment booked successfully',
+                'appointmentId' => $response['Appointment']['Id'] ?? null,
                 'booking_data' => $response
             ];
 

@@ -183,21 +183,34 @@ class Router
         exit;
     }
 
-    public function sendError(string $message, int $status = 400): void
-    {
-        $this->sendJson([
-            'error' => true,
-            'message' => $message,
-            'status' => $status
-        ], $status);
-    }
-
-    public function sendSuccess($data = null, string $message = 'Success'): void
+    public function sendError(string $message, int $status = 400, string $code = null, array $debug = null): void
     {
         $response = [
-            'success' => true,
+            'status' => 'error',
             'message' => $message
         ];
+        
+        if ($code) {
+            $response['code'] = $code;
+        }
+        
+        if ($debug) {
+            $response['debug'] = $debug;
+        }
+        
+        $this->sendJson($response, $status);
+    }
+
+    public function sendSuccess($data = null, string $message = 'Success', string $code = null): void
+    {
+        $response = [
+            'status' => 'success',
+            'message' => $message
+        ];
+
+        if ($code) {
+            $response['code'] = $code;
+        }
 
         if ($data !== null) {
             $response['data'] = $data;

@@ -1,0 +1,1218 @@
+{
+	"info": {
+		"_postman_id": "flexkit-ten-api-collection-v2",
+		"name": "FlexKit Ten API Collection (API_ENDPOINTS.md)",
+		"description": "Complete API collection for FlexKit Ten PHP Backend based on API_ENDPOINTS.md specification - includes authentication, timetable, booking, client management, and purchase endpoints with Bearer token authentication",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "flexkit-ten-v2"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{session_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "session_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "client_email",
+			"value": "test@example.com",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Root Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Check if the API is running and get basic information"
+					},
+					"response": []
+				},
+				{
+					"name": "API Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"status"
+							]
+						},
+						"description": "Get detailed status of all services including database and Mindbody API connection"
+					},
+					"response": []
+				},
+				{
+					"name": "Test API Connection",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"test"
+							]
+						},
+						"description": "Test the Mindbody API connection with a simple locations call"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for checking API health and status"
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Email Authentication",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.status === 'success') {",
+									"        console.log('OTP sent successfully to:', response.data.email);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{client_email}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/email",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"email"
+							]
+						},
+						"description": "Send OTP to user's email address. Searches for client in Mindbody and sends verification code."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"user@example.com\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/auth/email",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"auth",
+										"email"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"code\": \"otp_sent\",\n    \"message\": \"Verification code sent successfully.\",\n    \"data\": {\n        \"email\": \"user@example.com\",\n        \"expires_in\": 300\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "OTP Verification",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.status === 'success' && response.data.session) {",
+									"        pm.collectionVariables.set('session_token', response.data.session.id);",
+									"        console.log('Session token saved:', response.data.session.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{client_email}}\",\n    \"otp\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/verify",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"verify"
+							]
+						},
+						"description": "Verify OTP code and establish user session. Returns client details, schedule, and session token."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"user@example.com\",\n    \"otp\": \"123456\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/auth/verify",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"auth",
+										"verify"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"code\": \"verification_successful\",\n    \"message\": \"Verification successful.\",\n    \"data\": {\n        \"client\": {\n            \"id\": 12345,\n            \"first_name\": \"John\",\n            \"last_name\": \"Doe\",\n            \"email\": \"user@example.com\"\n        },\n        \"schedule\": [],\n        \"session\": {\n            \"id\": \"session_token_here\",\n            \"expires_at\": \"2024-01-02T12:00:00Z\",\n            \"last_activity\": \"2024-01-01T10:00:00Z\"\n        }\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/auth/logout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"logout"
+							]
+						},
+						"description": "Logout user and clear session"
+					},
+					"response": []
+				},
+				{
+					"name": "Auth Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/auth/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"status"
+							]
+						},
+						"description": "Check current authentication status"
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication endpoints for email OTP verification and session management"
+		},
+		{
+			"name": "Timetable & Availability",
+			"item": [
+				{
+					"name": "Get Timetable Filters",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/timetable/filters",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"timetable",
+								"filters"
+							]
+						},
+						"description": "Get available filters for timetable (locations, programs, session types)"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/timetable/filters",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"timetable",
+										"filters"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"locations\": [\n            {\n                \"id\": 1,\n                \"name\": \"Main Studio\",\n                \"siteId\": 12345\n            }\n        ],\n        \"programs\": {\n            \"classes\": [\n                {\n                    \"id\": 22,\n                    \"name\": \"Classes\"\n                }\n            ],\n            \"appointments\": [\n                {\n                    \"id\": 23,\n                    \"name\": \"Appointments\"\n                }\n            ]\n        },\n        \"sessionTypes\": [\n            {\n                \"id\": 1,\n                \"name\": \"Massage\",\n                \"defaultTimeLength\": 60\n            }\n        ]\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Classes Timetable",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{session_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/timetable/data?programType=classes&startDateTime=2024-01-01T00:00:00&endDateTime=2024-01-07T23:59:59&programId=22&locationId=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"timetable",
+								"data"
+							],
+							"query": [
+								{
+									"key": "programType",
+									"value": "classes",
+									"description": "Required: \"classes\" or \"appointments\""
+								},
+								{
+									"key": "startDateTime",
+									"value": "2024-01-01T00:00:00",
+									"description": "Required: Start date and time"
+								},
+								{
+									"key": "endDateTime",
+									"value": "2024-01-07T23:59:59",
+									"description": "Required: End date and time"
+								},
+								{
+									"key": "programId",
+									"value": "22",
+									"description": "Optional: Program ID for classes"
+								},
+								{
+									"key": "locationId",
+									"value": "1",
+									"description": "Optional: Location ID filter"
+								}
+							]
+						},
+						"description": "Get classes timetable data with optional filters. Include Bearer token to get client's booked visits."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Appointments Timetable",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{session_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/timetable/data?programType=appointments&startDateTime=2024-01-01T00:00:00&endDateTime=2024-01-07T23:59:59&sessionTypeId=1&locationId=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"timetable",
+								"data"
+							],
+							"query": [
+								{
+									"key": "programType",
+									"value": "appointments",
+									"description": "Required: \"classes\" or \"appointments\""
+								},
+								{
+									"key": "startDateTime",
+									"value": "2024-01-01T00:00:00",
+									"description": "Required: Start date and time"
+								},
+								{
+									"key": "endDateTime",
+									"value": "2024-01-07T23:59:59",
+									"description": "Required: End date and time"
+								},
+								{
+									"key": "sessionTypeId",
+									"value": "1",
+									"description": "Optional: Session type ID for appointments"
+								},
+								{
+									"key": "locationId",
+									"value": "1",
+									"description": "Optional: Location ID filter"
+								}
+							]
+						},
+						"description": "Get appointments timetable data with optional filters. Include Bearer token to get client's booked visits."
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for retrieving timetable data and availability filters"
+		},
+		{
+			"name": "Booking Management",
+			"item": [
+				{
+					"name": "Book Class",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{session_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"classId\": 456\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/class/book",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"class",
+								"book"
+							]
+						},
+						"description": "Book a class for the authenticated client. Requires Bearer token authentication."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{session_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"classId\": 456\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/class/book",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"class",
+										"book"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"message\": \"Class booked successfully\",\n    \"data\": {\n        \"Classes\": [\n            {\n                \"Id\": 123,\n                \"ClassId\": 456,\n                \"ClassName\": \"Yoga Flow\"\n            }\n        ]\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Cancel Class",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{session_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"classId\": 456,\n    \"startDateTime\": \"2024-01-01T09:00:00\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/class/cancel",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"class",
+								"cancel"
+							]
+						},
+						"description": "Cancel a booked class. Requires Bearer token authentication. Automatically calculates late cancellation based on startDateTime."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{session_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"classId\": 456,\n    \"startDateTime\": \"2024-01-01T09:00:00\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/class/cancel",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"class",
+										"cancel"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"message\": \"Class cancelled successfully\",\n    \"data\": {\n        \"late_cancel\": false,\n        \"result\": {}\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Book Appointment",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{session_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"startDateTime\": \"2024-01-01T10:00:00\",\n    \"staffId\": 1,\n    \"locationId\": 1,\n    \"sessionTypeId\": 1,\n    \"notes\": \"Optional notes\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/appointment/book",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"appointment",
+								"book"
+							]
+						},
+						"description": "Book an appointment for the authenticated client. Validates client services and remaining sessions. Requires Bearer token authentication."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{session_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"startDateTime\": \"2024-01-01T10:00:00\",\n    \"staffId\": 1,\n    \"locationId\": 1,\n    \"sessionTypeId\": 1,\n    \"notes\": \"Optional notes\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/appointment/book",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"appointment",
+										"book"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"message\": \"Appointment booked successfully\",\n    \"data\": {\n        \"AppointmentId\": 789,\n        \"StartDateTime\": \"2024-01-01T10:00:00\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Cancel Appointment",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{session_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"appointmentId\": 789,\n    \"sendEmail\": true,\n    \"lateCancel\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/appointment/cancel",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"appointment",
+								"cancel"
+							]
+						},
+						"description": "Cancel an appointment. Requires Bearer token authentication."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{session_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"appointmentId\": 789,\n    \"sendEmail\": true,\n    \"lateCancel\": false\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/appointment/cancel",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"appointment",
+										"cancel"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"message\": \"Appointment cancelled successfully\",\n    \"data\": {}\n}"
+						}
+					]
+				}
+			],
+			"description": "Endpoints for booking and cancelling classes and appointments"
+		},
+		{
+			"name": "Client Management",
+			"item": [
+				{
+					"name": "Register Client",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"1234567890\",\n    \"dateOfBirth\": \"1990-01-01\",\n    \"gender\": \"male\",\n    \"hearAbout\": \"Social Media\",\n    \"termsAccepted\": true,\n    \"marketingAccepted\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/client/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"client",
+								"register"
+							]
+						},
+						"description": "Register a new client in the Mindbody system"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"1234567890\",\n    \"dateOfBirth\": \"1990-01-01\",\n    \"gender\": \"male\",\n    \"hearAbout\": \"Social Media\",\n    \"termsAccepted\": true,\n    \"marketingAccepted\": true\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/client/register",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"client",
+										"register"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"message\": \"Account created successfully! Please log in to continue.\",\n    \"data\": {\n        \"client\": {\n            \"id\": 12345,\n            \"email\": \"john@example.com\",\n            \"first_name\": \"John\",\n            \"last_name\": \"Doe\"\n        }\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Client Complete Info",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{session_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/client/complete-info?start_date=2024-01-01&end_date=2024-01-31",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"client",
+								"complete-info"
+							],
+							"query": [
+								{
+									"key": "start_date",
+									"value": "2024-01-01",
+									"description": "Optional: Start date for data range"
+								},
+								{
+									"key": "end_date",
+									"value": "2024-01-31",
+									"description": "Optional: End date for data range"
+								}
+							]
+						},
+						"description": "Get complete client information including visits, services, and contracts. Requires Bearer token authentication."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{session_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/client/complete-info?start_date=2024-01-01&end_date=2024-01-31",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"client",
+										"complete-info"
+									],
+									"query": [
+										{
+											"key": "start_date",
+											"value": "2024-01-01"
+										},
+										{
+											"key": "end_date",
+											"value": "2024-01-31"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"Client\": {\n            \"Id\": 12345,\n            \"FirstName\": \"John\",\n            \"LastName\": \"Doe\",\n            \"Email\": \"john@example.com\"\n        },\n        \"Visits\": [],\n        \"Services\": [],\n        \"Contracts\": []\n    }\n}"
+						}
+					]
+				}
+			],
+			"description": "Endpoints for client registration and management"
+		},
+		{
+			"name": "Purchase Management",
+			"item": [
+				{
+					"name": "Get Purchase Details",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"type\": \"service\",\n    \"id\": \"123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/purchase/details",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"purchase",
+								"details"
+							]
+						},
+						"description": "Get details for a specific service or contract for purchase"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"service\",\n    \"id\": \"123\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/purchase/details",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"purchase",
+										"details"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"name\": \"Massage Session\",\n        \"price\": 75.00,\n        \"tax_rate\": 0.08,\n        \"id\": 123,\n        \"is_intro_offer\": false,\n        \"intro_offer_type\": null\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Purchase Contract",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"1234567890\",\n    \"contract_id\": 456,\n    \"credit_card\": {\n        \"number\": \"4111111111111111\",\n        \"exp_month\": \"12\",\n        \"exp_year\": \"2025\",\n        \"cvc\": \"123\",\n        \"billing_name\": \"John Doe\",\n        \"billing_address\": \"123 Main St\",\n        \"billing_city\": \"Anytown\",\n        \"billing_state\": \"CA\",\n        \"billing_postal_code\": \"12345\"\n    },\n    \"promotion_code\": \"WELCOME10\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/purchase/contract",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"purchase",
+								"contract"
+							]
+						},
+						"description": "Purchase a contract with credit card payment"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"1234567890\",\n    \"contract_id\": 456,\n    \"credit_card\": {\n        \"number\": \"4111111111111111\",\n        \"exp_month\": \"12\",\n        \"exp_year\": \"2025\",\n        \"cvc\": \"123\",\n        \"billing_name\": \"John Doe\",\n        \"billing_address\": \"123 Main St\",\n        \"billing_city\": \"Anytown\",\n        \"billing_state\": \"CA\",\n        \"billing_postal_code\": \"12345\"\n    },\n    \"promotion_code\": \"WELCOME10\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/purchase/contract",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"purchase",
+										"contract"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"message\": \"Contract purchased successfully\",\n    \"data\": {\n        \"ClientId\": 12345,\n        \"ContractId\": 456,\n        \"Totals\": {\n            \"Total\": 150.00,\n            \"Tax\": 12.00,\n            \"Discount\": 15.00\n        }\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Unified Purchase",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"type\": \"contract\",\n    \"id\": 456,\n    \"email\": \"john@example.com\",\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"phone\": \"1234567890\",\n    \"gender\": \"male\",\n    \"credit_card\": {\n        \"number\": \"4111111111111111\",\n        \"exp_month\": \"12\",\n        \"exp_year\": \"2025\",\n        \"billing_name\": \"John Doe\",\n        \"billing_address\": \"123 Main St\",\n        \"billing_city\": \"Anytown\",\n        \"billing_state\": \"CA\",\n        \"billing_postal_code\": \"12345\"\n    },\n    \"promotion_code\": \"WELCOME10\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/purchase",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"purchase"
+							]
+						},
+						"description": "Unified purchase endpoint for both services and contracts"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"type\": \"contract\",\n    \"id\": 456,\n    \"email\": \"john@example.com\",\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"phone\": \"1234567890\",\n    \"gender\": \"male\",\n    \"credit_card\": {\n        \"number\": \"4111111111111111\",\n        \"exp_month\": \"12\",\n        \"exp_year\": \"2025\",\n        \"billing_name\": \"John Doe\",\n        \"billing_address\": \"123 Main St\",\n        \"billing_city\": \"Anytown\",\n        \"billing_state\": \"CA\",\n        \"billing_postal_code\": \"12345\"\n    },\n    \"promotion_code\": \"WELCOME10\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/purchase",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"purchase"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"message\": \"Contract purchased successfully\",\n    \"data\": {\n        \"ClientId\": 12345,\n        \"ContractId\": 456,\n        \"Totals\": {\n            \"Total\": 150.00\n        }\n    }\n}"
+						}
+					]
+				}
+			],
+			"description": "Endpoints for purchase management and transactions"
+		},
+		{
+			"name": "Catalog",
+			"item": [
+				{
+					"name": "Get Contracts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/contracts?location_id=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"contracts"
+							],
+							"query": [
+								{
+									"key": "location_id",
+									"value": "1",
+									"description": "Optional: Filter by location ID"
+								}
+							]
+						},
+						"description": "Get available contracts/packages for purchase"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Promotions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/promotions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"promotions"
+							]
+						},
+						"description": "Get available promotion codes"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Services",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/services",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"services"
+							]
+						},
+						"description": "Get available services for purchase"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for retrieving available contracts, promotions, and services"
+		}
+	]
+} 
