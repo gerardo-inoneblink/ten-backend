@@ -714,29 +714,32 @@ class TimetableService
         }
     }
 
-    public function cancelAppointment(int $appointmentId, bool $sendEmail = true, bool $lateCancel = false): array
+    public function cancelAppointment(int $clientId, int $appointmentId, bool $sendEmail = true, bool $lateCancel = false): array
     {
         $this->debugLog("Cancelling appointment", [
+            'client_id' => $clientId,
             'appointment_id' => $appointmentId,
             'send_email' => $sendEmail,
             'late_cancel' => $lateCancel
         ]);
 
         try {
+            // Use the correct Mindbody API endpoint and parameters as per documentation
             $requestData = [
-                'appointmentId' => $appointmentId,
-                'status' => 'Cancelled',
-                'sendEmail' => $sendEmail,
-                'lateCancel' => $lateCancel
+                'ClientId' => $clientId,
+                'AppointmentId' => $appointmentId,
+                'SendEmail' => $sendEmail,
+                'LateCancel' => $lateCancel
             ];
 
             $response = $this->mindbodyApi->makeRequest(
-                '/appointment/updateappointment',
+                '/appointment/cancelappointment',
                 $requestData,
                 'POST'
             );
 
             $this->debugLog("Appointment cancellation successful", [
+                'client_id' => $clientId,
                 'appointment_id' => $appointmentId,
                 'send_email' => $sendEmail,
                 'late_cancel' => $lateCancel
@@ -750,6 +753,7 @@ class TimetableService
 
         } catch (\Exception $e) {
             $this->logger->error("Appointment cancellation failed: " . $e->getMessage(), [
+                'client_id' => $clientId,
                 'appointment_id' => $appointmentId,
                 'send_email' => $sendEmail,
                 'late_cancel' => $lateCancel

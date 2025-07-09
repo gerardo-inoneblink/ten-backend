@@ -523,10 +523,10 @@ try {
         $sendEmail = is_bool($sendEmail) ? $sendEmail : ($sendEmail === 'true' || $sendEmail === '1');
         $lateCancel = is_bool($lateCancel) ? $lateCancel : ($lateCancel === 'true' || $lateCancel === '1');
 
-        $result = $timetableService->cancelAppointment($appointmentId, $sendEmail, $lateCancel);
+        $result = $timetableService->cancelAppointment($client['Id'], $appointmentId, $sendEmail, $lateCancel);
         
         if ($result['success']) {
-            return $router->sendSuccess([], 'Appointment cancelled successfully');
+            return $router->sendSuccess((object)[], 'Appointment cancelled successfully');
         } else {
             return $router->sendError($result['message'], 500);
         }
