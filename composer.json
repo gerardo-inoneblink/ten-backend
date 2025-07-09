@@ -4,7 +4,6 @@
   "type": "project",
   "require": {
     "php": ">=8.0",
-    "vlucas/phpdotenv": "^5.0",
     "monolog/monolog": "^3.0",
     "resend/resend-php": "^0.18.1"
   },

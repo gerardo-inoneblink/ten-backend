@@ -2,8 +2,6 @@
 
 namespace FlexkitTen\Config;
 
-use Dotenv\Dotenv;
-
 class AppConfig
 {
     private static ?AppConfig $instance = null;
@@ -11,7 +9,6 @@ class AppConfig
 
     private function __construct()
     {
-        $this->loadEnvironment();
         $this->setDefaults();
     }
 
@@ -21,14 +18,6 @@ class AppConfig
             self::$instance = new self();
         }
         return self::$instance;
-    }
-
-    private function loadEnvironment(): void
-    {
-        if (file_exists(__DIR__ . '/../../.env')) {
-            $dotenv = Dotenv::createImmutable(__DIR__ . '/../..');
-            $dotenv->load();
-        }
     }
 
     private function setDefaults(): void
@@ -41,20 +30,21 @@ class AppConfig
             'DB_NAME' => 'flexkit_ten',
             'DB_USER' => 'root',
             'DB_PASS' => '',
-            'MINDBODY_API_KEY' => '',
-            'MINDBODY_SITE_ID' => '',
-            'MINDBODY_SOURCE_NAME' => '',
-            'MINDBODY_PASSWORD' => '',
+            'MINDBODY_API_KEY' => '5c3395a8c37d4c59a216c83ae4973f73',
+            'MINDBODY_SITE_ID' => '-2147480113',
+            'MINDBODY_SOURCE_NAME' => '_BLINK',
+            'MINDBODY_PASSWORD' => 'wxtC2wqHsDFpvdSv9uSnX452CbM=',
             'SERVER_HOST' => 'localhost',
             'SERVER_PORT' => '8000',
             'LOG_LEVEL' => 'info',
             'LOG_FILE' => 'logs/application.log',
             'RESEND_API_KEY' => 're_SR9DqBBn_AKEdwxvDJ53gkYPKe97LtRPY',
-            'RESEND_FROM_EMAIL' => 'onboarding@resend.dev'
+            'RESEND_FROM_EMAIL' => 'onboarding@resend.dev',
+            'RESEND_FROM_NAME' => 'FlexKit'
         ];
 
         foreach ($defaults as $key => $value) {
-            $this->config[$key] = $_ENV[$key] ?? $value;
+            $this->config[$key] = $value;
         }
     }
 

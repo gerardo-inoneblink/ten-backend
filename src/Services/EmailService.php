@@ -35,8 +35,8 @@ class EmailService
 
             $textContent = $this->createPlainTextVersion($clientName, $otp);
 
-            $fromEmail = $this->config->get('FROM_EMAIL', 'onboarding@resend.dev');
-            $fromName = $this->config->get('FROM_NAME', 'FlexKit');
+            $fromEmail = $this->config->get('RESEND_FROM_EMAIL');
+            $fromName = $this->config->get('RESEND_FROM_NAME');
 
             $params = [
                 'from' => $fromName . ' <' . $fromEmail . '>',
