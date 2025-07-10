@@ -2,3 +2,4 @@
 /logs
 .env
 composer.lock
+public/logs/application-2025-07-10.log

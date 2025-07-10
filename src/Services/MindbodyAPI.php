@@ -395,7 +395,35 @@ class MindbodyAPI
 
     public function createClient(array $clientData): array
     {
-        return $this->makeRequest('/client/addclient', $clientData, 'POST');
+        // Transform the data to match Mindbody API format
+        $payload = [
+            'Client' => [
+                'FirstName' => $clientData['firstName'],
+                'LastName' => $clientData['lastName'],
+                'Email' => $clientData['email'],
+                'MobilePhone' => $clientData['phone'],
+                'LiabilityRelease' => $clientData['termsAccepted'] ?? false,
+                'Country' => $clientData['country'] ?? 'US',
+                'ProspectStage' => 'Member'
+            ]
+        ];
+
+        // Optional fields
+        if (isset($clientData['dateOfBirth'])) {
+            $payload['Client']['BirthDate'] = $clientData['dateOfBirth'];
+        }
+        if (isset($clientData['gender'])) {
+            $payload['Client']['Gender'] = ucfirst($clientData['gender']);
+        }
+        if (isset($clientData['hearAbout'])) {
+            $payload['Client']['ReferredBy'] = $clientData['hearAbout'];
+        }
+        if (isset($clientData['marketingAccepted'])) {
+            $payload['Client']['SendPromotionalEmails'] = $clientData['marketingAccepted'];
+            $payload['Client']['SendPromotionalTexts'] = $clientData['marketingAccepted'];
+        }
+
+        return $this->makeRequest('/client/addclient', $payload, 'POST');
     }
 
     public function updateClient(array $clientData, string $siteId = null): array
@@ -660,6 +688,117 @@ class MindbodyAPI
         }
 
         return $this->makeRequest('/sale/purchasecontract', $params, 'POST', true);
+    }
+
+    public function unifiedPurchaseContract(array $purchaseData): array
+    {
+        $this->logger->info("Starting unified contract purchase", [
+            'email' => $purchaseData['email'],
+            'contract_id' => $purchaseData['id'],
+            'type' => $purchaseData['type']
+        ]);
+
+        try {
+            // Step 1: Search for existing client or create new one
+            $client = null;
+            $clientResponse = $this->searchClientByEmail($purchaseData['email']);
+            
+            if (!empty($clientResponse['Clients'])) {
+                foreach ($clientResponse['Clients'] as $clientData) {
+                    if (strtolower($clientData['Email']) === strtolower($purchaseData['email'])) {
+                        $client = $clientData;
+                        break;
+                    }
+                }
+            }
+
+            if (!$client) {
+                $this->logger->info("Client not found, creating new client", [
+                    'email' => $purchaseData['email']
+                ]);
+                
+                $clientData = [
+                    'firstName' => $purchaseData['first_name'],
+                    'lastName' => $purchaseData['last_name'],
+                    'email' => $purchaseData['email'],
+                    'phone' => $purchaseData['phone'],
+                    'termsAccepted' => true
+                ];
+                
+                // Add optional gender field
+                if (isset($purchaseData['gender'])) {
+                    $clientData['gender'] = $purchaseData['gender'];
+                }
+                
+                $createResponse = $this->createClient($clientData);
+                $client = $createResponse['Client'];
+            }
+
+            $this->logger->info("Using client for unified purchase", [
+                'client_id' => $client['Id'],
+                'email' => $client['Email']
+            ]);
+
+            // Step 2: Purchase the contract using purchasecontract
+            $creditCard = $purchaseData['credit_card'];
+            $contractId = $purchaseData['id']; // Note: uses 'id' instead of 'contract_id'
+            $locationId = $purchaseData['location_id'] ?? 1; // Default to location 1 if not provided
+            
+            $params = [
+                'ClientId' => $client['Id'],
+                'LocationId' => $locationId,
+                'ContractId' => $contractId,
+                'PaymentType' => 'CreditCard'
+            ];
+
+            if (!empty($purchaseData['promotion_code'])) {
+                $params['PromotionCode'] = $purchaseData['promotion_code'];
+            }
+
+            $params['CreditCardInfo'] = [
+                'CreditCardNumber' => $creditCard['number'],
+                'ExpMonth' => (int) $creditCard['exp_month'],
+                'ExpYear' => (int) $creditCard['exp_year'],
+                'BillingName' => $creditCard['billing_name'],
+                'BillingAddress' => $creditCard['billing_address'],
+                'BillingCity' => $creditCard['billing_city'],
+                'BillingState' => $creditCard['billing_state'],
+                'BillingPostalCode' => $creditCard['billing_postal_code']
+            ];
+
+            if (!empty($creditCard['cvc'])) {
+                $params['CreditCardInfo']['CVV'] = $creditCard['cvc'];
+            }
+
+            $this->logger->info("Calling purchasecontract for unified purchase", [
+                'client_id' => $client['Id'],
+                'contract_id' => $contractId
+            ]);
+
+            $response = $this->makeRequest('/sale/purchasecontract', $params, 'POST', true);
+
+            $this->logger->info("Unified contract purchase successful", [
+                'client_id' => $client['Id'],
+                'contract_id' => $contractId
+            ]);
+
+            // Return response in the simplified format for unified purchase
+            return [
+                'ClientId' => $client['Id'],
+                'ContractId' => $contractId,
+                'Totals' => [
+                    'Total' => $response['Totals']['Total'] ?? 0.00
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            $this->logger->error("Unified contract purchase failed: " . $e->getMessage(), [
+                'email' => $purchaseData['email'],
+                'contract_id' => $purchaseData['id'],
+                'type' => $purchaseData['type']
+            ]);
+            throw $e;
+        }
     }
 
     public function searchClientByEmail(string $email): array

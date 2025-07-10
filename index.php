@@ -645,19 +645,39 @@ try {
         }
     });
 
-    $router->post('/api/purchase', function($request, $response) use ($mindbodyApi, $otpService, $sessionService, $router) {
-        if (!$otpService->isAuthenticated()) {
-            return $router->sendError('Authentication required', 401);
+    $router->post('/api/purchase', function($request, $response) use ($mindbodyApi, $router) {
+        $data = $request['body'] ?? [];
+        
+        // Validate required fields
+        if (empty($data['type'])) {
+            return $router->sendError('Purchase type is required', 400);
+        }
+        if (empty($data['id'])) {
+            return $router->sendError('Purchase ID is required', 400);
+        }
+        if (empty($data['email'])) {
+            return $router->sendError('Email is required', 400);
+        }
+        if (empty($data['first_name'])) {
+            return $router->sendError('First name is required', 400);
+        }
+        if (empty($data['last_name'])) {
+            return $router->sendError('Last name is required', 400);
+        }
+        if (empty($data['phone'])) {
+            return $router->sendError('Phone is required', 400);
+        }
+        if (empty($data['credit_card'])) {
+            return $router->sendError('Credit card information is required', 400);
         }
 
-        $client = $sessionService->get('authenticated_client');
-        $purchaseData = $request['body'] ?? [];
-        
-        $purchaseData['clientId'] = $client['Id'];
-
         try {
-            $result = $mindbodyApi->purchaseContract($purchaseData);
-            return $router->sendSuccess($result, 'Purchase completed successfully');
+            if ($data['type'] === 'contract') {
+                $result = $mindbodyApi->unifiedPurchaseContract($data);
+                return $router->sendSuccess($result, 'Contract purchased successfully');
+            } else {
+                return $router->sendError('Unsupported purchase type', 400);
+            }
         } catch (\Exception $e) {
             return $router->sendError('Failed to complete purchase: ' . $e->getMessage(), 500);
         }
