@@ -1,58 +1,11 @@
 {
 	"info": {
-		"_postman_id": "flexkit-ten-api-collection-v2",
-		"name": "FlexKit Ten API Collection (API_ENDPOINTS.md)",
+		"_postman_id": "d5b6631b-7719-424b-9d5c-eebc349f520e",
+		"name": "FlexKit Ten API",
 		"description": "Complete API collection for FlexKit Ten PHP Backend based on API_ENDPOINTS.md specification - includes authentication, timetable, booking, client management, and purchase endpoints with Bearer token authentication",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "flexkit-ten-v2"
+		"_exporter_id": "22350041"
 	},
-	"auth": {
-		"type": "bearer",
-		"bearer": [
-			{
-				"key": "token",
-				"value": "{{session_token}}",
-				"type": "string"
-			}
-		]
-	},
-	"event": [
-		{
-			"listen": "prerequest",
-			"script": {
-				"type": "text/javascript",
-				"exec": [
-					""
-				]
-			}
-		},
-		{
-			"listen": "test",
-			"script": {
-				"type": "text/javascript",
-				"exec": [
-					""
-				]
-			}
-		}
-	],
-	"variable": [
-		{
-			"key": "base_url",
-			"value": "http://localhost:8000",
-			"type": "string"
-		},
-		{
-			"key": "session_token",
-			"value": "",
-			"type": "string"
-		},
-		{
-			"key": "client_email",
-			"value": "test@example.com",
-			"type": "string"
-		}
-	],
 	"item": [
 		{
 			"name": "Health Check",
@@ -72,25 +25,6 @@
 							]
 						},
 						"description": "Check if the API is running and get basic information"
-					},
-					"response": []
-				},
-				{
-					"name": "API Status",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/status",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"status"
-							]
-						},
-						"description": "Get detailed status of all services including database and Mindbody API connection"
 					},
 					"response": []
 				},
@@ -213,7 +147,8 @@
 									"    }",
 									"}"
 								],
-								"type": "text/javascript"
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -227,7 +162,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"email\": \"{{client_email}}\",\n    \"otp\": \"123456\"\n}"
+							"raw": "{\n    \"email\": \"{{client_email}}\",\n    \"otp\": \"837964\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/auth/verify",
@@ -277,46 +212,6 @@
 							"body": "{\n    \"status\": \"success\",\n    \"code\": \"verification_successful\",\n    \"message\": \"Verification successful.\",\n    \"data\": {\n        \"client\": {\n            \"id\": 12345,\n            \"first_name\": \"John\",\n            \"last_name\": \"Doe\",\n            \"email\": \"user@example.com\"\n        },\n        \"schedule\": [],\n        \"session\": {\n            \"id\": \"session_token_here\",\n            \"expires_at\": \"2024-01-02T12:00:00Z\",\n            \"last_activity\": \"2024-01-01T10:00:00Z\"\n        }\n    }\n}"
 						}
 					]
-				},
-				{
-					"name": "Logout",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/auth/logout",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"auth",
-								"logout"
-							]
-						},
-						"description": "Logout user and clear session"
-					},
-					"response": []
-				},
-				{
-					"name": "Auth Status",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/auth/status",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"auth",
-								"status"
-							]
-						},
-						"description": "Check current authentication status"
-					},
-					"response": []
 				}
 			],
 			"description": "Authentication endpoints for email OTP verification and session management"
@@ -385,7 +280,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/timetable/data?programType=classes&startDateTime=2024-01-01T00:00:00&endDateTime=2024-01-07T23:59:59&programId=22&locationId=1",
+							"raw": "{{base_url}}/api/timetable/data?programType=classes&startDateTime=2025-04-01T00:00:00&endDateTime=2025-04-30T23:59:59&programId=22&locationId=1",
 							"host": [
 								"{{base_url}}"
 							],
@@ -402,12 +297,12 @@
 								},
 								{
 									"key": "startDateTime",
-									"value": "2024-01-01T00:00:00",
+									"value": "2025-04-01T00:00:00",
 									"description": "Required: Start date and time"
 								},
 								{
 									"key": "endDateTime",
-									"value": "2024-01-07T23:59:59",
+									"value": "2025-04-30T23:59:59",
 									"description": "Required: End date and time"
 								},
 								{
@@ -442,7 +337,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/timetable/data?programType=appointments&startDateTime=2024-01-01T00:00:00&endDateTime=2024-01-07T23:59:59&sessionTypeId=1&locationId=1",
+							"raw": "{{base_url}}/api/timetable/data?programType=appointments&startDateTime=2024-01-01T00:00:00&endDateTime=2024-01-07T23:59:59&sessionTypeId=6&locationId=1",
 							"host": [
 								"{{base_url}}"
 							],
@@ -469,7 +364,7 @@
 								},
 								{
 									"key": "sessionTypeId",
-									"value": "1",
+									"value": "6",
 									"description": "Optional: Session type ID for appointments"
 								},
 								{
@@ -511,7 +406,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"classId\": 456\n}"
+							"raw": "{\n    \"classId\": 8\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/class/book",
@@ -588,7 +483,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"classId\": 456,\n    \"startDateTime\": \"2024-01-01T09:00:00\"\n}"
+							"raw": "{\n    \"classId\": 8,\n    \"startDateTime\": \"2025-04-01T09:00:00\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/class/cancel",
@@ -665,7 +560,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"startDateTime\": \"2024-01-01T10:00:00\",\n    \"staffId\": 1,\n    \"locationId\": 1,\n    \"sessionTypeId\": 1,\n    \"notes\": \"Optional notes\"\n}"
+							"raw": "{\n    \"startDateTime\": \"2025-04-01T10:00:00\",\n    \"staffId\": 100000959,\n    \"locationId\": 1,\n    \"sessionTypeId\": 6,\n    \"notes\": \"Optional notes\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/appointment/book",
@@ -815,7 +710,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"1234567890\",\n    \"dateOfBirth\": \"1990-01-01\",\n    \"gender\": \"male\",\n    \"hearAbout\": \"Social Media\",\n    \"termsAccepted\": true,\n    \"marketingAccepted\": true\n}"
+							"raw": "{\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"auth@inoneblinnk.com\",\n    \"phone\": \"1234567890\",\n    \"dateOfBirth\": \"1999-09-22\",\n    \"gender\": \"male\",\n    \"hearAbout\": \"Social Media\",\n    \"termsAccepted\": true,\n    \"marketingAccepted\": true\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/client/register",
@@ -882,7 +777,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/client/complete-info?start_date=2024-01-01&end_date=2024-01-31",
+							"raw": "{{base_url}}/api/client/complete-info?start_date=2025-01-01&end_date=2025-12-31",
 							"host": [
 								"{{base_url}}"
 							],
@@ -894,12 +789,12 @@
 							"query": [
 								{
 									"key": "start_date",
-									"value": "2024-01-01",
+									"value": "2025-01-01",
 									"description": "Optional: Start date for data range"
 								},
 								{
 									"key": "end_date",
-									"value": "2024-01-31",
+									"value": "2025-12-31",
 									"description": "Optional: End date for data range"
 								}
 							]
@@ -966,7 +861,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"type\": \"service\",\n    \"id\": \"123\"\n}"
+							"raw": "{\n    \"type\": \"service\",\n    \"id\": \"6553\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/purchase/details",
@@ -1029,7 +924,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"1234567890\",\n    \"contract_id\": 456,\n    \"credit_card\": {\n        \"number\": \"4111111111111111\",\n        \"exp_month\": \"12\",\n        \"exp_year\": \"2025\",\n        \"cvc\": \"123\",\n        \"billing_name\": \"John Doe\",\n        \"billing_address\": \"123 Main St\",\n        \"billing_city\": \"Anytown\",\n        \"billing_state\": \"CA\",\n        \"billing_postal_code\": \"12345\"\n    },\n    \"promotion_code\": \"WELCOME10\"\n}"
+							"raw": "{\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"email\": \"joseph@inoneblink.com\",\n    \"phone\": \"1234567890\",\n    \"contract_id\": 185,\n    \"location_id\": 1,\n    \"credit_card\": {\n        \"number\": \"4111111111111111\",\n        \"exp_month\": \"12\",\n        \"exp_year\": \"2025\",\n        \"cvc\": \"123\",\n        \"billing_name\": \"John Doe\",\n        \"billing_address\": \"123 Main St\",\n        \"billing_city\": \"Anytown\",\n        \"billing_state\": \"CA\",\n        \"billing_postal_code\": \"12345\"\n    },\n    \"promotion_code\": \"\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/purchase/contract",
@@ -1092,7 +987,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"type\": \"contract\",\n    \"id\": 456,\n    \"email\": \"john@example.com\",\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"phone\": \"1234567890\",\n    \"gender\": \"male\",\n    \"credit_card\": {\n        \"number\": \"4111111111111111\",\n        \"exp_month\": \"12\",\n        \"exp_year\": \"2025\",\n        \"billing_name\": \"John Doe\",\n        \"billing_address\": \"123 Main St\",\n        \"billing_city\": \"Anytown\",\n        \"billing_state\": \"CA\",\n        \"billing_postal_code\": \"12345\"\n    },\n    \"promotion_code\": \"WELCOME10\"\n}"
+							"raw": "{\n    \"type\": \"contract\",\n    \"id\": 185,\n    \"email\": \"joseph@inoneblink.com\",\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"phone\": \"1234567890\",\n    \"gender\": \"male\",\n    \"credit_card\": {\n        \"number\": \"4111111111111111\",\n        \"exp_month\": \"12\",\n        \"exp_year\": \"2025\",\n        \"billing_name\": \"John Doe\",\n        \"billing_address\": \"123 Main St\",\n        \"billing_city\": \"Anytown\",\n        \"billing_state\": \"CA\",\n        \"billing_postal_code\": \"12345\"\n    },\n    \"promotion_code\": \"\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/purchase",
@@ -1174,25 +1069,6 @@
 					"response": []
 				},
 				{
-					"name": "Get Promotions",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/promotions",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"promotions"
-							]
-						},
-						"description": "Get available promotion codes"
-					},
-					"response": []
-				},
-				{
 					"name": "Get Services",
 					"request": {
 						"method": "GET",
@@ -1214,5 +1090,52 @@
 			],
 			"description": "Endpoints for retrieving available contracts, promotions, and services"
 		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{session_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "session_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "client_email",
+			"value": "test@example.com",
+			"type": "string"
+		}
 	]
-} 
+}
