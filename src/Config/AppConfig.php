@@ -9,6 +9,7 @@ class AppConfig
 
     private function __construct()
     {
+        $this->loadEnvironmentVariables();
         $this->setDefaults();
     }
 
@@ -18,6 +19,37 @@ class AppConfig
             self::$instance = new self();
         }
         return self::$instance;
+    }
+
+    private function loadEnvironmentVariables(): void
+    {
+        $envPath = dirname(__DIR__, 2) . '/.env';
+        
+        if (file_exists($envPath)) {
+            $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            
+            foreach ($lines as $line) {
+                if (strpos($line, '#') === 0) {
+                    continue; // Skip comments
+                }
+                
+                if (strpos($line, '=') !== false) {
+                    list($key, $value) = explode('=', $line, 2);
+                    $key = trim($key);
+                    $value = trim($value);
+                    
+                    // Remove quotes if present
+                    if (preg_match('/^"(.*)"$/', $value, $matches)) {
+                        $value = $matches[1];
+                    } elseif (preg_match("/^'(.*)'$/", $value, $matches)) {
+                        $value = $matches[1];
+                    }
+                    
+                    $_ENV[$key] = $value;
+                    putenv("$key=$value");
+                }
+            }
+        }
     }
 
     private function setDefaults(): void
@@ -30,21 +62,21 @@ class AppConfig
             'DB_NAME' => 'flexkit_ten',
             'DB_USER' => 'root',
             'DB_PASS' => '',
-            'MINDBODY_API_KEY' => '5c3395a8c37d4c59a216c83ae4973f73',
-            'MINDBODY_SITE_ID' => '-2147480113',
+            'MINDBODY_API_KEY' => '',
+            'MINDBODY_SITE_ID' => '',
             'MINDBODY_SOURCE_NAME' => '_BLINK',
-            'MINDBODY_PASSWORD' => 'wxtC2wqHsDFpvdSv9uSnX452CbM=',
+            'MINDBODY_PASSWORD' => '',
             'SERVER_HOST' => 'localhost',
             'SERVER_PORT' => '8000',
             'LOG_LEVEL' => 'info',
             'LOG_FILE' => 'logs/application.log',
-            'RESEND_API_KEY' => 're_SR9DqBBn_AKEdwxvDJ53gkYPKe97LtRPY',
-            'RESEND_FROM_EMAIL' => 'onboarding@resend.dev',
+            'RESEND_API_KEY' => '',
+            'RESEND_FROM_EMAIL' => 'no-reploy@inoneblink.com',
             'RESEND_FROM_NAME' => 'FlexKit'
         ];
 
         foreach ($defaults as $key => $value) {
-            $this->config[$key] = $value;
+            $this->config[$key] = $_ENV[$key] ?? $value;
         }
     }
 
