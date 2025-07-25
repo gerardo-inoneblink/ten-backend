@@ -139,7 +139,6 @@ class OTPService
 
         try {
             $sessionId = $this->sessionService->getSessionId();
-
             $otpRecord = $this->database->findOne('flexkit_otp_sessions', [
                 'session_id' => $sessionId,
                 'otp_code' => $otpCode,

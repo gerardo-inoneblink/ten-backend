@@ -175,6 +175,43 @@ class Router
         return $headers;
     }
 
+    public function enableCors(): void
+    {
+        // Get the origin from the request
+        $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+        
+        // Allow specific origins (localhost for development)
+        $allowedOrigins = [
+            'http://localhost:5000',
+            'https://localhost:5000',
+            'http://127.0.0.1:5000',
+            'https://127.0.0.1:5000',
+            'http://localhost:5001',
+            'https://localhost:5001',
+            'http://127.0.0.1:5001',
+            'https://127.0.0.1:5001'
+        ];
+        
+        // Set CORS headers
+        if (in_array($origin, $allowedOrigins) || $this->config->get('APP_ENV') === 'development') {
+            header('Access-Control-Allow-Origin: ' . ($origin ?: 'http://localhost:5000'));
+        } else {
+            // For production, be more restrictive
+            header('Access-Control-Allow-Origin: *');
+        }
+        
+        header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, PATCH');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept, Origin');
+        header('Access-Control-Allow-Credentials: true');
+        header('Access-Control-Max-Age: 86400'); // Cache preflight for 24 hours
+
+        // Handle preflight OPTIONS requests
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            http_response_code(204); // No Content for preflight
+            exit;
+        }
+    }
+
     public function sendJson($data, int $status = 200): void
     {
         http_response_code($status);
@@ -222,17 +259,5 @@ class Router
     private function sendNotFound(): void
     {
         $this->sendError('Route not found', 404);
-    }
-
-    public function enableCors(): void
-    {
-        header('Access-Control-Allow-Origin: *');
-        header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            http_response_code(200);
-            exit;
-        }
     }
 }
