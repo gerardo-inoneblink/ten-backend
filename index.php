@@ -374,10 +374,10 @@ try {
 
         // Check if cancellation is late (within 12 hours)
         $lateCancel = false;
-        $classTime = strtotime($startDateTime);
-        if ($classTime && $classTime - time() < 12 * 60 * 60) {
-            $lateCancel = true;
-        }
+        // $classTime = strtotime($startDateTime);
+        // if ($classTime && $classTime - time() < 12 * 60 * 60) {
+        //     $lateCancel = true;
+        // }
 
         $result = $timetableService->cancelClass($client['Id'], $classId, $lateCancel);
         
