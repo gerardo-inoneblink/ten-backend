@@ -190,6 +190,7 @@ class MindbodyAPI
                 $this->debugLog("Making API request", [
                     'method' => $method,
                     'url' => $url,
+                    'headers' => $headers,
                     'params' => $params
                 ]);
 
@@ -842,14 +843,36 @@ class MindbodyAPI
         ]);
 
         try {
+            // Get client complete info (client data, services, contracts)
             $response = $this->makeRequest('/client/clientcompleteinfo', $params);
+            
+            // Get client visits separately using clientvisits endpoint
+            $visitsParams = [
+                'ClientId' => $clientId
+            ];
+            
+            if ($startDate) {
+                $visitsParams['StartDate'] = $startDate;
+            }
+            if ($endDate) {
+                $visitsParams['EndDate'] = $endDate;
+            }
+            
+            $visitsResponse = [];
+            try {
+                $visitsResponse = $this->makeRequest('/client/clientvisits', $visitsParams);
+            } catch (\Exception $e) {
+                $this->logger->warning("Failed to fetch client visits: " . $e->getMessage(), [
+                    'client_id' => $clientId
+                ]);
+            }
             
             $this->logger->info("Client complete info fetched successfully", [
                 'client_id' => $clientId,
                 'has_client' => isset($response['Client']),
-                'visits_count' => count($response['Visits'] ?? []),
-                'services_count' => count($response['Services'] ?? []),
-                'contracts_count' => count($response['Contracts'] ?? [])
+                'visits_count' => count($visitsResponse['Visits'] ?? []),
+                'services_count' => count($response['ClientServices'] ?? []),
+                'contracts_count' => count($response['ClientContracts'] ?? [])
             ]);
             
             // Transform client data to match the snake_case format used in other endpoints
@@ -857,20 +880,65 @@ class MindbodyAPI
             $transformedClient = null;
             
             if ($clientData) {
+                // Extract address information if available
+                $address = null;
+                if (isset($clientData['HomeLocation']) && !empty($clientData['HomeLocation'])) {
+                    $primaryAddress = $clientData['HomeLocation'][0];
+                    $address = [
+                        'line1' => $primaryAddress['Address1'] ?? '',
+                        'line2' => $primaryAddress['Address2'] ?? '',
+                        'city' => $primaryAddress['City'] ?? '',
+                        'postal_code' => $primaryAddress['PostalCode'] ?? '',
+                        'state' => $primaryAddress['State'] ?? '',
+                        'country' => $primaryAddress['Country'] ?? ''
+                    ];
+                }
+                
                 $transformedClient = [
                     'id' => $clientData['Id'],
-                    'first_name' => $clientData['FirstName'],
-                    'last_name' => $clientData['LastName'],
-                    'email' => $clientData['Email']
+                    'first_name' => $clientData['FirstName'] ?? '',
+                    'last_name' => $clientData['LastName'] ?? '',
+                    'email' => $clientData['Email'] ?? '',
+                    'mobile_phone' => $clientData['MobilePhone'] ?? '',
+                    'home_phone' => $clientData['HomePhone'] ?? '',
+                    'work_phone' => $clientData['WorkPhone'] ?? '',
+                    'birth_date' => $clientData['BirthDate'] ?? '',
+                    'gender' => $clientData['Gender'] ?? '',
+                    'address' => $address
                 ];
+            }
+            
+            // Transform visits data
+            $transformedVisits = [];
+            if (isset($visitsResponse['Visits']) && is_array($visitsResponse['Visits'])) {
+                foreach ($visitsResponse['Visits'] as $visit) {
+                    $transformedVisits[] = [
+                        'id' => $visit['Id'] ?? '',
+                        'class_id' => $visit['ClassId'] ?? '',
+                        'appointment_id' => $visit['AppointmentId'] ?? '',
+                        'visit_date' => $visit['StartDateTime'] ?? '',
+                        'end_date' => $visit['EndDateTime'] ?? '',
+                        'name' => $visit['Name'] ?? '',
+                        'staff_name' => $visit['StaffName'] ?? '',
+                        'location_name' => $visit['LocationName'] ?? '',
+                        'program_name' => $visit['ProgramName'] ?? '',
+                        'session_type_name' => $visit['SessionTypeName'] ?? '',
+                        'service_name' => $visit['ServiceName'] ?? '',
+                        'signed_in' => $visit['SignedIn'] ?? false,
+                        'makeup' => $visit['Makeup'] ?? false,
+                        'late_cancelled' => $visit['LateCancelled'] ?? false,
+                        'appointment_status' => $visit['AppointmentStatus'] ?? '',
+                        'web_signup' => $visit['WebSignup'] ?? false
+                    ];
+                }
             }
             
             // Return data in the format expected by API documentation
             return [
                 'client' => $transformedClient,
-                'visits' => $response['Visits'] ?? [],
-                'services' => $response['Services'] ?? [],
-                'contracts' => $response['Contracts'] ?? []
+                'visits' => $transformedVisits,
+                'services' => $response['ClientServices'] ?? [],
+                'contracts' => $response['ClientContracts'] ?? []
             ];
         } catch (\Exception $e) {
             $this->logger->error("Error fetching client complete info: " . $e->getMessage(), [

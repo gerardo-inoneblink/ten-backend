@@ -10,7 +10,11 @@ $allowedOrigins = [
     'http://localhost:5000',
     'https://localhost:5000',
     'http://127.0.0.1:5000',
-    'https://127.0.0.1:5000'
+    'https://127.0.0.1:5000',
+    'http://localhost:5001',
+    'https://localhost:5001',
+    'http://127.0.0.1:5001',
+    'https://127.0.0.1:5001'
 ];
 
 // Set CORS headers
@@ -21,7 +25,7 @@ if (in_array($origin, $allowedOrigins)) {
 }
 
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, PATCH');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept, Origin');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Session-ID');
 header('Access-Control-Allow-Credentials: true');
 header('Access-Control-Max-Age: 86400');
 
@@ -43,7 +47,7 @@ echo json_encode([
     'headers_sent' => [
         'Access-Control-Allow-Origin' => in_array($origin, $allowedOrigins) ? $origin : '*',
         'Access-Control-Allow-Methods' => 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-        'Access-Control-Allow-Headers' => 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
+        'Access-Control-Allow-Headers' => 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Session-ID',
         'Access-Control-Allow-Credentials' => 'true'
     ],
     'timestamp' => date('c')
