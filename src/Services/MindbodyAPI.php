@@ -896,6 +896,7 @@ class MindbodyAPI
                 
                 $transformedClient = [
                     'id' => $clientData['Id'],
+                    'credit_card' => $clientData['ClientCreditCard'] ?? null,
                     'first_name' => $clientData['FirstName'] ?? '',
                     'last_name' => $clientData['LastName'] ?? '',
                     'email' => $clientData['Email'] ?? '',
