@@ -619,6 +619,104 @@ try {
         }
     });
 
+    $router->put('/api/client/update', function($request, $response) use ($mindbodyApi, $sessionService, $router) {
+        // Check Bearer token authentication
+        $authHeader = $request['headers']['authorization'] ?? '';
+        if (strpos($authHeader, 'Bearer ') !== 0) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
+        $token = substr($authHeader, 7);
+        $storedToken = $sessionService->get('session_token');
+        $tokenExpiry = $sessionService->get('token_expires_at');
+        
+        if ($token !== $storedToken || $tokenExpiry <= time()) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
+        $client = $sessionService->get('authenticated_client');
+        if (!$client) {
+            return $router->sendError('Authentication required', 401);
+        }
+
+        $userData = $request['body'] ?? [];
+        
+        // Validate required fields for update
+        if (empty($userData['first_name']) && empty($userData['last_name']) && empty($userData['email'])) {
+            return $router->sendError('At least one field (first_name, last_name, or email) is required for update', 400);
+        }
+
+        try {
+            // Transform frontend data to Mindbody API format
+            $clientData = [
+                'Client' => [
+                    'Id' => $client['Id']  // Required for update
+                ]
+            ];
+
+            // Map frontend fields to Mindbody fields
+            if (!empty($userData['first_name'])) {
+                $clientData['Client']['FirstName'] = $userData['first_name'];
+            }
+            if (!empty($userData['last_name'])) {
+                $clientData['Client']['LastName'] = $userData['last_name'];
+            }
+            if (!empty($userData['email'])) {
+                $clientData['Client']['Email'] = $userData['email'];
+            }
+            if (!empty($userData['mobile_phone'])) {
+                $clientData['Client']['MobilePhone'] = $userData['mobile_phone'];
+            }
+            if (!empty($userData['home_phone'])) {
+                $clientData['Client']['HomePhone'] = $userData['home_phone'];
+            }
+            if (!empty($userData['birth_date'])) {
+                $clientData['Client']['BirthDate'] = $userData['birth_date'];
+            }
+            if (!empty($userData['gender'])) {
+                $clientData['Client']['Gender'] = ucfirst($userData['gender']);
+            }
+            if (!empty($userData['referred_by'])) {
+                $clientData['Client']['ReferredBy'] = $userData['referred_by'];
+            }
+            if (isset($userData['send_promotional_emails'])) {
+                $clientData['Client']['SendPromotionalEmails'] = $userData['send_promotional_emails'];
+            }
+
+            // Address fields - must be nested under Address object according to Mindbody API
+            if (!empty($userData['line1'])) {
+                $clientData['Client']['AddressLine1'] = $userData['line1'];
+            }
+            if (!empty($userData['city'])) {
+                $clientData['Client']['City'] = $userData['city'];
+            }
+            if (!empty($userData['postal_code'])) {
+                $clientData['Client']['PostalCode'] = $userData['postal_code'];
+            }
+            if (!empty($userData['country'])) {
+                $clientData['Client']['Country'] = $userData['country'];
+            }
+
+            // return $router->sendSuccess($clientData, 'Profile updated successfully');
+            $result = $mindbodyApi->updateClient($clientData);
+            
+            // Update the session with new client data if successful
+            if (isset($result['Client'])) {
+                $sessionService->set('authenticated_client', $result['Client']);
+            }
+            
+            // Return response in expected format
+            $responseData = [
+                'client' => $result['Client'] ?? $client,
+                'success' => true
+            ];
+            
+            return $router->sendSuccess($responseData, 'Profile updated successfully');
+        } catch (\Exception $e) {
+            return $router->sendError('Failed to update client profile: ' . $e->getMessage(), 500);
+        }
+    });
+
     $router->post('/api/purchase/contract', function($request, $response) use ($mindbodyApi, $otpService, $sessionService, $router) {
         if (!$otpService->isAuthenticated()) {
             return $router->sendError('Authentication required', 401);

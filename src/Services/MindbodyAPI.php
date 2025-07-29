@@ -429,7 +429,12 @@ class MindbodyAPI
 
     public function updateClient(array $clientData, string $siteId = null): array
     {
-        return $this->makeRequest('/client/updateclient', $clientData, 'POST');
+        // Add CrossRegionalUpdate parameter for single-site businesses
+        $payload = array_merge($clientData, [
+            'CrossRegionalUpdate' => false
+        ]);
+        
+        return $this->makeRequest('/client/updateclient', $payload, 'POST');
     }
 
     public function getServices(string $siteId = null): array
@@ -879,21 +884,7 @@ class MindbodyAPI
             $clientData = $response['Client'] ?? null;
             $transformedClient = null;
             
-            if ($clientData) {
-                // Extract address information if available
-                $address = null;
-                if (isset($clientData['HomeLocation']) && !empty($clientData['HomeLocation'])) {
-                    $primaryAddress = $clientData['HomeLocation'][0];
-                    $address = [
-                        'line1' => $primaryAddress['Address1'] ?? '',
-                        'line2' => $primaryAddress['Address2'] ?? '',
-                        'city' => $primaryAddress['City'] ?? '',
-                        'postal_code' => $primaryAddress['PostalCode'] ?? '',
-                        'state' => $primaryAddress['State'] ?? '',
-                        'country' => $primaryAddress['Country'] ?? ''
-                    ];
-                }
-                
+            if ($clientData) {                
                 $transformedClient = [
                     'id' => $clientData['Id'],
                     'credit_card' => $clientData['ClientCreditCard'] ?? null,
@@ -905,7 +896,14 @@ class MindbodyAPI
                     'work_phone' => $clientData['WorkPhone'] ?? '',
                     'birth_date' => $clientData['BirthDate'] ?? '',
                     'gender' => $clientData['Gender'] ?? '',
-                    'address' => $address
+                    'line1' => $clientData['AddressLine1'] ?? '',
+                    'line2' => $clientData['AddressLine2'] ?? '',
+                    'city' => $clientData['City'] ?? '',
+                    'postal_code' => $clientData['PostalCode'] ?? '',
+                    'state' => $clientData['State'] ?? '',
+                    'country' => $clientData['Country'] ?? '',
+                    'referred_by' => $clientData['ReferredBy'] ?? '',
+                    'send_promotional_emails' => $clientData['SendPromotionalEmails'] ?? ''
                 ];
             }
             
