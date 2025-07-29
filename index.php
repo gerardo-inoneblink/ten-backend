@@ -642,8 +642,11 @@ try {
         $userData = $request['body'] ?? [];
         
         // Validate required fields for update
-        if (empty($userData['first_name']) && empty($userData['last_name']) && empty($userData['email'])) {
-            return $router->sendError('At least one field (first_name, last_name, or email) is required for update', 400);
+        $hasPersonalInfo = !empty($userData['first_name']) || !empty($userData['last_name']) || !empty($userData['email']);
+        $hasCreditCardInfo = !empty($userData['Client']['ClientCreditCard']);
+        
+        if (!$hasPersonalInfo && !$hasCreditCardInfo) {
+            return $router->sendError('At least one field (personal info or credit card info) is required for update', 400);
         }
 
         try {
@@ -697,7 +700,31 @@ try {
                 $clientData['Client']['Country'] = $userData['country'];
             }
 
-            // return $router->sendSuccess($clientData, 'Profile updated successfully');
+            // Handle ClientCreditCard data if provided
+            if (!empty($userData['Client']['ClientCreditCard'])) {
+                $creditCardData = $userData['Client']['ClientCreditCard'];
+                
+                // Validate required credit card fields
+                $requiredFields = ['CardHolder', 'CardNumber', 'ExpMonth', 'ExpYear'];
+                foreach ($requiredFields as $field) {
+                    if (empty($creditCardData[$field])) {
+                        return $router->sendError("Credit card field '$field' is required", 400);
+                    }
+                }
+                
+                // Set credit card data in the format expected by Mindbody API
+                $clientData['Client']['ClientCreditCard'] = [
+                    'CardHolder' => $creditCardData['CardHolder'],
+                    'CardNumber' => $creditCardData['CardNumber'],
+                    'ExpMonth' => $creditCardData['ExpMonth'],
+                    'ExpYear' => $creditCardData['ExpYear'],
+                    'PostalCode' => $creditCardData['PostalCode'] ?? ''
+                ];
+            }
+
+            // Log the client data being sent to Mindbody API for debugging
+            error_log('Sending client data to Mindbody API: ' . json_encode($clientData, JSON_PRETTY_PRINT));
+            
             $result = $mindbodyApi->updateClient($clientData);
             
             // Update the session with new client data if successful
