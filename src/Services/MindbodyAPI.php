@@ -830,120 +830,226 @@ class MindbodyAPI
 
     public function getClientCompleteInfo(int $clientId, string $siteId, string $startDate = null, string $endDate = null): array
     {
-        $params = [
-            'ClientId' => $clientId
-        ];
-
-        if ($startDate) {
-            $params['StartDate'] = $startDate;
-        }
-        if ($endDate) {
-            $params['EndDate'] = $endDate;
-        }
-
-        $this->logger->info("Fetching client complete info", [
+        $this->debugLog('🟦 Starting client complete info request', [
             'client_id' => $clientId,
-            'start_date' => $startDate,
-            'end_date' => $endDate
+            'site_id' => $siteId
         ]);
 
         try {
-            // Get client complete info (client data, services, contracts)
-            $response = $this->makeRequest('/client/clientcompleteinfo', $params);
-            
-            // Get client visits separately using clientvisits endpoint
-            $visitsParams = [
-                'ClientId' => $clientId
-            ];
-            
-            if ($startDate) {
-                $visitsParams['StartDate'] = $startDate;
-            }
-            if ($endDate) {
-                $visitsParams['EndDate'] = $endDate;
-            }
-            
-            $visitsResponse = [];
-            try {
-                $visitsResponse = $this->makeRequest('/client/clientvisits', $visitsParams);
-            } catch (\Exception $e) {
-                $this->logger->warning("Failed to fetch client visits: " . $e->getMessage(), [
-                    'client_id' => $clientId
-                ]);
-            }
-            
-            $this->logger->info("Client complete info fetched successfully", [
-                'client_id' => $clientId,
-                'has_client' => isset($response['Client']),
-                'visits_count' => count($visitsResponse['Visits'] ?? []),
-                'services_count' => count($response['ClientServices'] ?? []),
-                'contracts_count' => count($response['ClientContracts'] ?? [])
+            // Get client info
+            $clientInfo = $this->makeRequest('/client/clientcompleteinfo', [
+                'clientID' => $clientId,
+                'limit' => 200,
+                'offset' => 0
             ]);
+
+            if (!isset($clientInfo['Client'])) {
+                throw new \Exception('Client not found');
+            }
+
+            $now = new \DateTime();
             
-            // Transform client data to match the snake_case format used in other endpoints
-            $clientData = $response['Client'] ?? null;
-            $transformedClient = null;
-            
-            if ($clientData) {                
-                $transformedClient = [
-                    'id' => $clientData['Id'],
-                    'credit_card' => $clientData['ClientCreditCard'] ?? null,
+            // Format client data - keep the 'client' key as requested
+            $clientData = $clientInfo['Client'];
+            $formattedResponse = [
+                'client' => [
+                    'id' => $clientData['Id'] ?? $clientId,
                     'first_name' => $clientData['FirstName'] ?? '',
                     'last_name' => $clientData['LastName'] ?? '',
                     'email' => $clientData['Email'] ?? '',
                     'mobile_phone' => $clientData['MobilePhone'] ?? '',
                     'home_phone' => $clientData['HomePhone'] ?? '',
                     'work_phone' => $clientData['WorkPhone'] ?? '',
-                    'birth_date' => $clientData['BirthDate'] ?? '',
                     'gender' => $clientData['Gender'] ?? '',
-                    'line1' => $clientData['AddressLine1'] ?? '',
-                    'line2' => $clientData['AddressLine2'] ?? '',
-                    'city' => $clientData['City'] ?? '',
-                    'postal_code' => $clientData['PostalCode'] ?? '',
-                    'state' => $clientData['State'] ?? '',
-                    'country' => $clientData['Country'] ?? '',
+                    'status' => $clientData['Status'] ?? '',
+                    'creation_date' => $clientData['CreationDate'] ?? '',
+                    'birth_date' => $clientData['BirthDate'] ?? '',
                     'referred_by' => $clientData['ReferredBy'] ?? '',
-                    'send_promotional_emails' => $clientData['SendPromotionalEmails'] ?? ''
-                ];
-            }
+                    'send_promotional_emails' => $clientData['SendPromotionalEmails'] ?? false,
+                    'address' => [
+                        'line1' => $clientData['AddressLine1'] ?? '',
+                        'line2' => $clientData['AddressLine2'] ?? '',
+                        'city' => $clientData['City'] ?? '',
+                        'state' => $clientData['State'] ?? '',
+                        'postal_code' => $clientData['PostalCode'] ?? '',
+                        'country' => $clientData['Country'] ?? ''
+                    ],
+                    'account_balance' => $clientData['AccountBalance'] ?? 0,
+                    'credit_card' => $clientData['ClientCreditCard'] ?? null
+                ]
+            ];
+
+            // Process memberships and services using the helper method
+            $services = $clientInfo['ClientServices'] ?? [];
+            $memberships = $clientInfo['ClientMemberships'] ?? [];
+            $allItems = array_merge($services, $memberships);
             
-            // Transform visits data
-            $transformedVisits = [];
-            if (isset($visitsResponse['Visits']) && is_array($visitsResponse['Visits'])) {
-                foreach ($visitsResponse['Visits'] as $visit) {
-                    $transformedVisits[] = [
-                        'id' => $visit['Id'] ?? '',
-                        'class_id' => $visit['ClassId'] ?? '',
-                        'appointment_id' => $visit['AppointmentId'] ?? '',
-                        'visit_date' => $visit['StartDateTime'] ?? '',
-                        'end_date' => $visit['EndDateTime'] ?? '',
-                        'name' => $visit['Name'] ?? '',
-                        'staff_name' => $visit['StaffName'] ?? '',
-                        'location_name' => $visit['LocationName'] ?? '',
-                        'program_name' => $visit['ProgramName'] ?? '',
-                        'session_type_name' => $visit['SessionTypeName'] ?? '',
-                        'service_name' => $visit['ServiceName'] ?? '',
-                        'signed_in' => $visit['SignedIn'] ?? false,
-                        'makeup' => $visit['Makeup'] ?? false,
-                        'late_cancelled' => $visit['LateCancelled'] ?? false,
-                        'appointment_status' => $visit['AppointmentStatus'] ?? '',
-                        'web_signup' => $visit['WebSignup'] ?? false
-                    ];
+            $formattedResponse['memberships'] = $this->processMemberships($allItems, $now);
+
+            // Process contracts - structured like old backend
+            $contracts = $clientInfo['ClientContracts'] ?? [];
+            $formattedResponse['contracts'] = [
+                'active' => [],
+                'terminated' => []
+            ];
+
+            foreach ($contracts as $contract) {
+                $formattedContract = [
+                    'id' => $contract['Id'],
+                    'name' => $contract['ContractName'],
+                    'start_date' => $contract['StartDate'],
+                    'end_date' => $contract['EndDate'],
+                    'agreement_date' => $contract['AgreementDate'],
+                    'autopay_status' => $contract['AutopayStatus'],
+                    'auto_renewing' => $contract['AutoRenewing'],
+                    'upcoming_payments' => array_map(function($event) {
+                        return [
+                            'date' => $event['ScheduleDate'],
+                            'amount' => $event['ChargeAmount'],
+                            'product_id' => $event['ProductId']
+                        ];
+                    }, $contract['UpcomingAutopayEvents'] ?? [])
+                ];
+
+                if ($contract['TerminationDate']) {
+                    $formattedResponse['contracts']['terminated'][] = $formattedContract;
+                } else {
+                    $formattedResponse['contracts']['active'][] = $formattedContract;
                 }
             }
-            
-            // Return data in the format expected by API documentation
-            return [
-                'client' => $transformedClient,
-                'visits' => $transformedVisits,
-                'services' => $response['ClientServices'] ?? [],
-                'contracts' => $response['ClientContracts'] ?? []
-            ];
-        } catch (\Exception $e) {
-            $this->logger->error("Error fetching client complete info: " . $e->getMessage(), [
+
+            // Get visits with extended date range like old backend
+            $pastDate = (new \DateTime())->modify('-3 years')->format('Y-m-d');
+            $futureDate = (new \DateTime())->modify('+3 months')->format('Y-m-d');
+
+            $this->debugLog('📥 Fetching client visits', [
                 'client_id' => $clientId,
-                'start_date' => $startDate,
-                'end_date' => $endDate
+                'start_date' => $startDate ?? $pastDate,
+                'end_date' => $endDate ?? $futureDate,
+                'now' => $now->format('Y-m-d H:i:s'),
+                'date_range' => '3 years back, 3 months forward'
+            ]);
+
+            // Make separate request for visits
+            $visitsResponse = $this->makeRequest('/client/clientvisits', [
+                'clientId' => $clientId,
+                'startDate' => $startDate ?? $pastDate,
+                'endDate' => $endDate ?? $futureDate,
+                'limit' => 200
+            ]);
+
+            $visits = $visitsResponse['Visits'] ?? [];
+            
+            $this->debugLog('📦 Processing visits response', [
+                'total_visits' => count($visits),
+                'has_visits_key' => isset($visitsResponse['Visits']),
+                'response_keys' => array_keys($visitsResponse)
+            ]);
+            
+            // Process visits into session_history format like old backend
+            $upcomingSessions = [];
+            $previousSessions = [];
+            $sessionTypes = [];
+            
+            foreach ($visits as $visit) {
+                $visitDate = new \DateTime($visit['StartDateTime']);
+                $isClass = !empty($visit['ClassId']);
+                
+                // Format visit status
+                $status = $this->formatVisitStatus($visit);
+                
+                $this->debugLog('📦 Processing visit', [
+                    'visit_id' => $visit['Id'],
+                    'date' => $visitDate->format('Y-m-d H:i:s'),
+                    'is_future' => $visitDate > $now,
+                    'name' => $visit['Name'],
+                    'status' => $status,
+                    'appointment_status' => $visit['AppointmentStatus'],
+                    'now' => $now->format('Y-m-d H:i:s'),
+                    'date_comparison' => $visitDate > $now ? 'future' : 'past',
+                    'will_be_upcoming' => ($visitDate > $now && $visit['AppointmentStatus'] === 'Booked') ? 'yes' : 'no'
+                ]);
+                
+                // Format session data like old backend
+                $formattedVisit = [
+                    'id' => $visit['Id'],
+                    'date' => $visitDate->format('Y-m-d'),
+                    'time' => $visitDate->format('g:i A'),
+                    'end_time' => (new \DateTime($visit['EndDateTime']))->format('g:i A'),
+                    'name' => $visit['Name'],
+                    'type' => $isClass ? 'class' : 'appointment',
+                    'status' => $status,
+                    'location' => [
+                        'id' => $visit['LocationId'],
+                        'name' => $visit['LocationName'] ?? 'TBD'
+                    ],
+                    'staff' => [
+                        'id' => $visit['StaffId'],
+                        'name' => $visit['StaffName'] ?? 'TBD'
+                    ],
+                    'service' => [
+                        'id' => $visit['ServiceId'],
+                        'name' => $visit['ServiceName'],
+                        'product_id' => $visit['ProductId']
+                    ],
+                    'can_cancel' => !$visit['LateCancelled'] && $status !== 'cancelled',
+                    'is_late_cancel' => $visit['LateCancelled'],
+                    'signed_in' => $visit['SignedIn'],
+                    'missed' => $visit['Missed'] ?? false
+                ];
+
+                // Track unique session types
+                if (!isset($sessionTypes[$visit['Name']])) {
+                    $sessionTypes[$visit['Name']] = [
+                        'name' => $visit['Name'],
+                        'type' => $isClass ? 'class' : 'appointment',
+                        'count' => 1
+                    ];
+                } else {
+                    $sessionTypes[$visit['Name']]['count']++;
+                }
+
+                // Sort into upcoming/previous based on date and status like old backend
+                if ($visitDate > $now && $visit['AppointmentStatus'] === 'Booked') {
+                    $upcomingSessions[] = $formattedVisit;
+                } else {
+                    $previousSessions[] = $formattedVisit;
+                }
+            }
+
+            // Sort sessions like old backend
+            usort($upcomingSessions, function($a, $b) {
+                return strtotime($a['date'] . ' ' . $a['time']) - strtotime($b['date'] . ' ' . $b['time']);
+            });
+            
+            usort($previousSessions, function($a, $b) {
+                return strtotime($b['date'] . ' ' . $b['time']) - strtotime($a['date'] . ' ' . $a['time']);
+            });
+
+            // Build session_history like old backend
+            $formattedResponse['session_history'] = [
+                'upcoming' => $upcomingSessions,
+                'previous' => $previousSessions,
+                'stats' => [
+                    'total_sessions' => count($visits),
+                    'upcoming_count' => count($upcomingSessions),
+                    'previous_count' => count($previousSessions),
+                    'session_types' => array_values($sessionTypes)
+                ]
+            ];
+
+            $this->debugLog('✅ Successfully compiled client info', [
+                'total_visits' => count($visits),
+                'upcoming' => count($upcomingSessions),
+                'previous' => count($previousSessions)
+            ]);
+            
+            return $formattedResponse;
+
+        } catch (\Exception $e) {
+            $this->debugLog('❌ Error in getClientCompleteInfo', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
             throw $e;
         }
@@ -1012,6 +1118,79 @@ class MindbodyAPI
                 'site_id' => $siteId
             ]);
             throw $e;
+        }
+    }
+
+    /**
+     * Process memberships and services into a structured format
+     * 
+     * @param array $allItems Combined services and memberships
+     * @param \DateTime $now Current date/time
+     * @return array Processed memberships data
+     */
+    private function processMemberships(array $allItems, \DateTime $now): array
+    {
+        $processed = [];
+        
+        foreach ($allItems as $item) {
+            $expirationDate = null;
+            if (!empty($item['ExpirationDate'])) {
+                $expirationDate = new \DateTime($item['ExpirationDate']);
+            }
+            
+            $processed[] = [
+                'id' => $item['Id'],
+                'name' => $item['Name'],
+                'count' => $item['Count'] ?? 0,
+                'remaining' => $item['Remaining'] ?? 0,
+                'active_date' => $item['ActiveDate'] ?? '',
+                'expiration_date' => $item['ExpirationDate'] ?? '',
+                'payment_date' => $item['PaymentDate'] ?? '',
+                'current' => $item['Current'] ?? false,
+                'product_id' => $item['ProductId'] ?? '',
+                'program' => $item['Program'] ?? [],
+                'site_id' => $item['SiteId'] ?? '',
+                'client_id' => $item['ClientID'] ?? '',
+                'is_expired' => $expirationDate ? $expirationDate < $now : false,
+                'days_until_expiry' => $expirationDate ? $expirationDate->diff($now)->days : null
+            ];
+        }
+        
+        return $processed;
+    }
+
+    /**
+     * Format visit status for display
+     * 
+     * @param array $visit Visit data
+     * @return string Formatted status
+     */
+    private function formatVisitStatus(array $visit): string
+    {
+        $appointmentStatus = $visit['AppointmentStatus'] ?? '';
+        $signedIn = $visit['SignedIn'] ?? false;
+        $lateCancelled = $visit['LateCancelled'] ?? false;
+        $missed = $visit['Missed'] ?? false;
+        
+        if ($lateCancelled) {
+            return 'cancelled';
+        }
+        
+        if ($missed) {
+            return 'missed';
+        }
+        
+        switch (strtolower($appointmentStatus)) {
+            case 'booked':
+                return $signedIn ? 'completed' : 'booked';
+            case 'cancelled':
+                return 'cancelled';
+            case 'noshow':
+                return 'no-show';
+            case 'confirmed':
+                return 'confirmed';
+            default:
+                return strtolower($appointmentStatus) ?: 'unknown';
         }
     }
 }
