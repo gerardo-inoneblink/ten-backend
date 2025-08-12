@@ -172,11 +172,13 @@ class MindbodyAPI
                 $siteId = $this->getDefaultSiteId();
                 $token = $useStaffToken ? $this->getFreshStaffToken() : $this->getFreshToken($siteId);
 
-                $url = $this->apiBaseUrl . $endpoint;
+                $this->debugLog("token", ["token is" => $token]);
+
+                $url = "{$this->apiBaseUrl}{$endpoint}";
                 $headers = [
-                    'API-Key: ' . $this->credentials['api_key'],
-                    'SiteId: ' . $siteId,
-                    'Authorization: ' . $token,
+                    "API-Key: {$this->credentials['api_key']}",
+                    "SiteId: {$siteId}",
+                    "Authorization: {$token}",
                     'Content-Type: application/json'
                 ];
 
@@ -516,7 +518,7 @@ class MindbodyAPI
             $response = $this->makeRequest('/sale/services', [
                 'limit' => 200,
                 'offset' => 0,
-                'locationId' => $site_id,
+                'locationId' => $siteId,
                 'sellOnline' => true
             ], 'GET', true);
             // Find the specific service by ID

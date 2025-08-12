@@ -96,6 +96,7 @@ class OTPService
 
             $this->logger->logOtpOperation("OTP stored in database", [
                 'otp_id' => $otpId,
+                'otp' => $otp,
                 'expires_at' => $expiresAt
             ]);
 
