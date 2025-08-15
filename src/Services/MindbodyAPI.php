@@ -1057,6 +1057,29 @@ class MindbodyAPI
         }
     }
 
+    public function getPurchaseHistory(int $clientId, string $siteId){
+
+        $this->debugLog('🟦 Starting client Purchase history request', [
+            'client_id' => $clientId,
+            'site_id' => $siteId
+        ]);
+
+        try {
+            $purchaseHistory = $this->makeRequest('/client/clientpurchases', [
+                'ClientId' => $clientId,
+            ], "GET", true);
+            
+            return $purchaseHistory;
+
+        } catch (\Exception $e) {
+            $this->debugLog('❌ Error in getClientPurchaseHistory', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
+    }
+
     public function getPromotionCodes(string $siteId = null): array
     {
         $siteId = $siteId ?: $this->getDefaultSiteId();

@@ -619,6 +619,39 @@ try {
         }
     });
 
+    $router->get('/api/client/purchase-history', function($request, $response) use ($mindbodyApi, $sessionService, $router){
+        $authHeader = $request['headers']['authorization'] ?? '';
+        if (strpos($authHeader, 'Bearer ') !== 0) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
+        $token = substr($authHeader, 7);
+        $storedToken = $sessionService->get('session_token');
+        $tokenExpiry = $sessionService->get('token_expires_at');
+        
+        if ($token !== $storedToken || $tokenExpiry <= time()) {
+            return $router->sendError('Authentication required', 401);
+        }
+        
+        $client = $sessionService->get('authenticated_client');
+        try{
+            $result = $mindbodyApi->getPurchaseHistory(
+                $client['Id'],
+                $mindbodyApi->getDefaultSiteId(),
+            );
+
+            $response = [
+                'status' => 'success',
+                'data' => $result
+            ];
+
+            return $router->sendJson($response);
+        }catch(\Exception $e) {
+            return $router->sendError('Failed to get purchase history' . $e->getMessage(), 500);
+        }
+    });
+
+
     $router->put('/api/client/update', function($request, $response) use ($mindbodyApi, $sessionService, $router) {
         // Check Bearer token authentication
         $authHeader = $request['headers']['authorization'] ?? '';
