@@ -73,7 +73,7 @@ class AppConfig
             'RESEND_API_KEY' => '',
             'RESEND_FROM_EMAIL' => 'no-reploy@inoneblink.com',
             'RESEND_FROM_NAME' => 'FlexKit',
-            'JWT_SECRET' => 'dwfkwoivhweusdkfjwe'
+            'JWT_SECRET' => 'dwfkwoivhweusdkfjwesecurekey12345678'
         ];
 
         foreach ($defaults as $key => $value) {

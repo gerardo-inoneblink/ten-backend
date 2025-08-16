@@ -7,8 +7,9 @@ use FlexkitTen\Services\Database;
 use FlexkitTen\Services\Logger;
 use FlexkitTen\Services\Router;
 use FlexkitTen\Services\MindbodyAPI;
-use FlexkitTen\Services\OTPService;
-use FlexkitTen\Services\SessionService;
+use FlexkitTen\Services\StatelessOTPService;
+use FlexkitTen\Services\JWTService;
+use FlexkitTen\Services\StatelessAuthMiddleware;
 use FlexkitTen\Services\TimetableService;
 
 error_reporting(E_ALL);
@@ -19,10 +20,11 @@ try {
     $logger = Logger::getInstance();
     $database = Database::getInstance();
     $router = new Router();
-    $sessionService = SessionService::getInstance();
 
     $mindbodyApi = new MindbodyAPI();
-    $otpService = new OTPService($database, $mindbodyApi, $logger, $sessionService);
+    $jwtService = new JWTService();
+    $otpService = new StatelessOTPService($database, $mindbodyApi, $logger, $jwtService);
+    $authMiddleware = new StatelessAuthMiddleware($jwtService, $logger);
     $timetableService = new TimetableService($mindbodyApi, $logger);
 
     $logger->info("FlexKit Ten application started", [
@@ -32,8 +34,6 @@ try {
     ]);
 
     $router->enableCors();
-
-    $sessionService->updateActivity();
 
     $router->addMiddleware(function($request, $response) use ($logger) {
         $logger->debug("CORS middleware processed");
@@ -95,14 +95,15 @@ try {
         }
 
         try {
-            $logger->info("Starting email OTP process", ['email' => $email]);
+            $logger->info("Starting stateless email OTP process", ['email' => $email]);
             $result = $otpService->sendEmailOtp($email);
             
             if ($result['success']) {
-                // Format response according to API_ENDPOINTS.md
+                // Return request_id that client needs for verification
                 $responseData = [
+                    'request_id' => $result['request_id'], // NEW: Client needs this
                     'email' => $email,
-                    'expires_in' => 300
+                    'expires_in' => 600 // 10 minutes
                 ];
                 return $router->sendSuccess($responseData, 'Verification code sent successfully.', 'otp_sent');
             } else {
@@ -129,58 +130,39 @@ try {
         }
     });
 
-    $router->post('/api/auth/verify', function($request, $response) use ($otpService, $router, $mindbodyApi, $sessionService) {
-        $email = $request['body']['email'] ?? '';
+    $router->post('/api/auth/verify', function($request, $response) use ($otpService, $router, $mindbodyApi, $logger) {
+        $requestId = $request['body']['request_id'] ?? '';
         $otpCode = $request['body']['otp'] ?? '';
         
-        if (empty($email)) {
-            return $router->sendError('Email is required', 400);
+        if (empty($requestId)) {
+            return $router->sendError('Request ID is required', 400);
         }
         
         if (empty($otpCode)) {
             return $router->sendError('OTP code is required', 400);
         }
 
-        $result = $otpService->verifyOtp($otpCode);
+        $result = $otpService->verifyOtp($requestId, $otpCode);
         
         if ($result['success']) {
             try {
-                // Get client details from session
-                $client = $sessionService->get('authenticated_client');
-                
-                if (!$client) {
-                    return $router->sendError('Client not found', 404);
-                }
-                
-                // Get client schedule
+                // Get client schedule (optional)
                 $schedule = [];
                 try {
                     $scheduleResult = $mindbodyApi->makeRequest('/client/clientschedule', [
-                        'ClientId' => $client['Id']
+                        'ClientId' => $result['client']['id']
                     ]);
                     $schedule = $scheduleResult['Visits'] ?? [];
                 } catch (\Exception $e) {
                     // Schedule fetch failed, but continue with empty schedule
                 }
                 
-                // Generate session token
-                $sessionToken = bin2hex(random_bytes(32));
-                $sessionService->set('session_token', $sessionToken);
-                $sessionService->set('token_expires_at', time() + (24 * 60 * 60)); // 24 hours
-                
                 $responseData = [
-                    'client' => [
-                        'id' => $client['Id'],
-                        'first_name' => $client['FirstName'] ?? '',
-                        'last_name' => $client['LastName'] ?? '',
-                        'email' => $client['Email'] ?? ''
-                    ],
-                    'schedule' => $schedule,
-                    'session' => [
-                        'id' => $sessionToken,
-                        'expires_at' => date('c', time() + (24 * 60 * 60)),
-                        'last_activity' => date('c')
-                    ]
+                    'access_token' => $result['access_token'], // JWT token
+                    'token_type' => $result['token_type'],
+                    'expires_in' => $result['expires_in'],
+                    'client' => $result['client'],
+                    'schedule' => $schedule
                 ];
                 
                 return $router->sendSuccess($responseData, 'Verification successful.', 'verification_successful');
@@ -199,22 +181,16 @@ try {
         }
     });
 
-    $router->get('/api/auth/status', function($request, $response) use ($otpService, $sessionService) {
-        $isAuthenticated = $otpService->isAuthenticated();
-        $client = $sessionService->get('authenticated_client');
+    $router->get('/api/auth/status', function($request, $response) use ($authMiddleware) {
+        $tokenData = $authMiddleware->validateRequest($request);
         
         return [
             'status' => 'success',
             'message' => 'Authentication status retrieved',
             'data' => [
-                'authenticated' => $isAuthenticated,
-                'client' => $isAuthenticated ? [
-                    'id' => $client['Id'] ?? null,
-                    'first_name' => $client['FirstName'] ?? '',
-                    'last_name' => $client['LastName'] ?? '',
-                    'email' => $client['Email'] ?? ''
-                ] : null,
-                'session_id' => $sessionService->getSessionId()
+                'authenticated' => $tokenData !== null,
+                'client' => $tokenData['client'] ?? null,
+                'expires_at' => $tokenData ? date('c', $tokenData['exp']) : null
             ]
         ];
     });

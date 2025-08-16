@@ -114,7 +114,7 @@ class Database
     {
         $sql = "CREATE TABLE IF NOT EXISTS flexkit_otp_requests (
             id BIGINT(20) NOT NULL AUTO_INCREMENT,
-            request_id VARCHAR(32) NOT NULL UNIQUE,
+            request_id VARCHAR(32) NOT NULL,
             otp_code VARCHAR(255) NOT NULL,
             client_id BIGINT(20) NULL,
             client_email VARCHAR(255) NULL,
