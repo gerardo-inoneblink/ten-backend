@@ -57,6 +57,7 @@ class Database
     {
         $this->createOtpSessionsTable();
         $this->createClientDetailsTable();
+        $this->createOtpRequestsTable(); // For stateless OTP
     }
 
     private function createOtpSessionsTable(): void
@@ -104,6 +105,31 @@ class Database
             KEY email (email),
             KEY phone (phone),
             KEY expires_at (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+        $this->connection->exec($sql);
+    }
+
+    private function createOtpRequestsTable(): void
+    {
+        $sql = "CREATE TABLE IF NOT EXISTS flexkit_otp_requests (
+            id BIGINT(20) NOT NULL AUTO_INCREMENT,
+            request_id VARCHAR(32) NOT NULL UNIQUE,
+            otp_code VARCHAR(255) NOT NULL,
+            client_id BIGINT(20) NULL,
+            client_email VARCHAR(255) NULL,
+            client_data TEXT NULL,
+            delivery_method VARCHAR(10) NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            used TINYINT(1) NOT NULL DEFAULT 0,
+            used_at DATETIME NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY request_id (request_id),
+            KEY client_id (client_id),
+            KEY client_email (client_email),
+            KEY expires_at (expires_at),
+            KEY used (used)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
         $this->connection->exec($sql);

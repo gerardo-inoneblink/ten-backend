@@ -61,7 +61,7 @@ class AppConfig
             'DB_HOST' => 'localhost',
             'DB_NAME' => 'flexkit_ten',
             'DB_USER' => 'root',
-            'DB_PASS' => '',
+            'DB_PASS' => '123qweasd!Q',
             'MINDBODY_API_KEY' => '',
             'MINDBODY_SITE_ID' => '',
             'MINDBODY_SOURCE_NAME' => '_BLINK',
@@ -72,7 +72,8 @@ class AppConfig
             'LOG_FILE' => 'logs/application.log',
             'RESEND_API_KEY' => '',
             'RESEND_FROM_EMAIL' => 'no-reploy@inoneblink.com',
-            'RESEND_FROM_NAME' => 'FlexKit'
+            'RESEND_FROM_NAME' => 'FlexKit',
+            'JWT_SECRET' => 'dwfkwoivhweusdkfjwe'
         ];
 
         foreach ($defaults as $key => $value) {
